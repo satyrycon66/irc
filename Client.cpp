@@ -1,46 +1,53 @@
 #include "Client.hpp"
-#include <algorithm>
 
-Client::Client(int socket, const std::string& username, const std::string& nickname)
-    : socket(socket), username(username), nickname(nickname) {}
-
-Client::~Client() {}
-
-int Client::getSocket() const {
-    return socket;
+Client::Client(int socket)
+    : _socket(socket), _authenticated(false)
+{
+    // Initialisez d'autres membres au besoin
 }
 
-std::string Client::getUsername() const {
-    return username;
+Client::~Client()
+{
+    // Nettoyage des ressources associées au client, si nécessaire
 }
 
-std::string Client::getNickname() const {
-    return nickname;
+int Client::getSocket() const
+{
+    return _socket;
 }
 
-std::vector<std::string> Client::getChannels() const {
-    return channels;
+const std::string& Client::getUsername() const
+{
+    return _username;
 }
 
-void Client::joinChannel(const std::string& channel) {
-    channels.push_back(channel);
+bool Client::isAuthenticated() const
+{
+    return _authenticated;
 }
 
-void Client::leaveChannel(const std::string& channel) {
-    std::vector<std::string>::iterator it = std::find(channels.begin(), channels.end(), channel);
-    if (it != channels.end()) {
-        channels.erase(it);
-    }
+void Client::setUsername(const std::string& username)
+{
+    _username = username;
 }
 
-bool Client::isInChannel(const std::string& channel) const {
-    std::vector<std::string>::const_iterator it = std::find(channels.begin(), channels.end(), channel);
-    return it != channels.end();
+void Client::authenticate()
+{
+    _authenticated = true;
 }
 
-// Dans ce fichier Client.cpp :
+Client::Client(const std::string& username) : _username(username) {
+    // Initialisation éventuelle
+}
 
-// Nous implémentons les méthodes déclarées dans Client.hpp pour accéder aux informations du client telles que le socket, le nom d'utilisateur, le surnom et les canaux, ainsi que des méthodes pour rejoindre, quitter et vérifier l'appartenance à un canal.
-// Les méthodes joinChannel, leaveChannel et isInChannel sont implémentées pour gérer les opérations relatives aux canaux d'un client.
-// Les autres méthodes sont implémentées pour accéder aux informations du client.
-// Vous devrez compléter ce fichier Client.cpp en fonction des fonctionnalités spécifiques que vous souhaitez implémenter pour votre serveur IRC, comme la gestion des messages, les commandes IRC, etc.
+// Implémentation de getUsername(), etc.
+
+// Opérateur de comparaison ==
+bool Client::operator==(const Client& other) const {
+    return this->_username == other._username; // Comparaison basée sur le nom d'utilisateur par exemple
+}
+
+// Opérateur de comparaison !=
+bool Client::operator!=(const Client& other) const {
+    return !(*this == other); // Utilisation de l'opérateur == pour définir !=
+}
