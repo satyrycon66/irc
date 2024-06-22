@@ -15,6 +15,7 @@ public:
     void setNick(const std::string& nick);
     void setUsername(const std::string& username);
     void authenticate();
+    bool isInChannel(const std::string& channelName) const;
 
       // Opérateur de comparaison ==
     bool operator==(const Client& other) const;

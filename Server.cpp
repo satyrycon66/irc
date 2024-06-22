@@ -143,6 +143,7 @@ void Server::handleClientData(int client_index)
             if (!channelName.empty()) {
                 if (!findChannel(channelName)) {
                     createChannel(channelName);
+                    
                 }
                 joinChannel(channelName, _clients[client_index]);
             }
@@ -152,9 +153,29 @@ void Server::handleClientData(int client_index)
             // Répondre au message PING du client
             std::string pongResponse = "PONG " + std::string(buffer + 5) + "\r\n";
             send(_fds[client_index].fd, pongResponse.c_str(), pongResponse.length(), 0);
-        } else if (strncmp(buffer, "/part ", 6) == 0) {
-            // Implémenter la logique pour quitter un canal
-        } else if (strncmp(buffer, "/privmsg ", 9) == 0) {
+        }else if (strncmp(buffer, "PART ", 5) == 0) {
+    std::string command(buffer);
+    std::istringstream iss(command.substr(5));
+
+    std::string channelName;
+    iss >> channelName;
+
+    if (!channelName.empty()) {
+        Channel* channel = findChannel(channelName);
+        if (channel) {
+            try {
+                leaveChannel(channelName, _clients[client_index]);
+                // Send response to WeeChat indicating success
+                std::string response = ":server PART " + _clients[client_index].getNick() + " :" + channelName + " Leaving channel\r\n";
+                send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to leave channel " << channelName << ": " << e.what() << std::endl;
+            }
+        } else {
+            std::cerr << "Channel not found: " << channelName << std::endl;
+        }
+    }
+}else if (strncmp(buffer, "/privmsg ", 9) == 0) {
             // Implémenter la logique pour envoyer un message privé
         } else {
             // Par défaut, diffuser le message à tous les clients sauf l'expéditeur
@@ -289,8 +310,17 @@ void Server::leaveChannel(const std::string& channelName, const Client& client)
 {
     Channel* channel = findChannel(channelName);
     if (channel) {
-        channel->removeClient(client);
-        std::cout << "Client " << client.getSocket() << " left channel " << channelName << std::endl;
+        if (channel->hasClient(client)) {
+            channel->removeClient(client);
+            std::cout << "Client " << client.getSocket() << " left channel " << channelName << std::endl;
+
+            // Envoyer le message PART au client
+            std::string partMessage = ":" + client.getNick() + "!~" + client.getUsername() + "@localhost PART " + channelName + "\r\n";
+            send(client.getSocket(), partMessage.c_str(), partMessage.length(), 0);
+
+        } else {
+            std::cerr << "Client " << client.getSocket() << " is not in channel " << channelName << std::endl;
+        }
     } else {
         std::cerr << "Channel not found: " << channelName << std::endl;
     }

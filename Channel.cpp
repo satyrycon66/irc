@@ -45,6 +45,17 @@ void Channel::broadcastMessage(const std::string& message , const Client& sender
     }
 }
 
+bool Channel::hasClient(const Client& client) const {
+    // Implémentation de la méthode
+    // Vérifie si le client est présent dans le vecteur _clients
+    for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        if (*it == client) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const std::vector<Client>& Channel::getClients() const {
     return _clients;
 }

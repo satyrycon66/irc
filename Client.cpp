@@ -47,3 +47,5 @@ bool Client::operator==(const Client& other) const {
 bool Client::operator!=(const Client& other) const {
     return !(*this == other); // Utilisation de l'opérateur == pour définir !=
 }
+
+
