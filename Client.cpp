@@ -16,20 +16,16 @@ int Client::getSocket() const
     return _socket;
 }
 
-const std::string& Client::getUsername() const
-{
-    return _username;
-}
+const std::string& Client::getNick() const {return _nick;}
+const std::string& Client::getUsername() const{    return _username;}
 
 bool Client::isAuthenticated() const
 {
     return _authenticated;
 }
 
-void Client::setUsername(const std::string& username)
-{
-    _username = username;
-}
+void Client::setUsername(const std::string& username){    _username = username;}
+void Client::setNick(const std::string& nick){    _nick = nick;}
 
 void Client::authenticate()
 {

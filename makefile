@@ -1,5 +1,5 @@
 CC = c++
-CFLAGS = -std=c++98 -Wall -Werror -Wextra
+CFLAGS = 
 
 SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:.cpp=.o)
@@ -17,3 +17,6 @@ clean:
 fclean:
 	rm -f $(OBJS) $(EXEC)
 re: fclean all
+
+run: re
+	./a.out 6697 asd

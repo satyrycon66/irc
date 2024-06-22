@@ -10,7 +10,9 @@ public:
     Client(const std::string& username);
     int getSocket() const;
     const std::string& getUsername() const;
+    const std::string& getNick() const;
     bool isAuthenticated() const;
+    void setNick(const std::string& nick);
     void setUsername(const std::string& username);
     void authenticate();
 
@@ -23,6 +25,7 @@ public:
 private:
     int _socket;
     std::string _username;
+    std::string _nick;
     bool _authenticated;
 };
 

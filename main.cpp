@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "Client.hpp"
 #include <iostream>
 
 int main(int argc, char *argv[]) {

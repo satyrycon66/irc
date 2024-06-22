@@ -32,15 +32,16 @@ void Channel::removeClient(const Client& client) {
 }
 
 // Méthode pour diffuser un message à tous les clients sauf l'expéditeur
-void Channel::broadcastMessage(const std::string& /* message */, const Client& sender) {
+void Channel::broadcastMessage(const std::string& message , const Client& sender) {
     // Utilisation d'un itérateur explicite
+            std::cout << message + "***";
     for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it) {
         // Diffusion du message à tous les clients sauf à l'expéditeur
         // Exemple imaginaire : if (it->getUsername() != sender.getUsername())
-        if (*it != sender) {
-            // Envoyer le message au client
+
+            std::cout << message + "***";
             // Exemple imaginaire : it->sendMessage(message);
-        }
+        
     }
 }
 

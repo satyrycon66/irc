@@ -14,13 +14,15 @@ public:
     Server(int port, const std::string& password);
     ~Server();
     void run();
- void handleNewConnection(int socket);
+    void handleNewConnection(int socket);
     void handleClientData(Client& client, const std::string& data);
     void handleClientDisconnect(Client& client);
     void createChannel(const std::string& name);
     void joinChannel(const std::string& channelName, const Client& client);
     void leaveChannel(const std::string& channelName, const Client& client);
-
+    void handleNickCommand(int client_index, const char* buffer);
+    void handleUserCommand(int client_index, const char* buffer);
+    void sendWelcomeMessage(int client_index);
 private:
     int _port;
     std::string _password;

@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <iostream>
 #include "Client.hpp"  // Incluez si nécessaire pour la gestion des utilisateurs dans le canal
 
 class Channel {

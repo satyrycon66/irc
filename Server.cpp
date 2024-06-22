@@ -8,72 +8,67 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <vector>  
+#include <vector>
 #include <sstream>
 
-// Constructeur
+#define MAX_CLIENTS 100
+
+// Constructor
 Server::Server(int port, const std::string& password)
     : _port(port), _password(password), _running(false)
 {
-    // Création du socket
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_server_fd == -1) {
         throw std::runtime_error("Failed to create socket");
     }
 
-    // Configuration de l'adresse
     sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(_port);
 
-    // Attachement du socket à l'adresse et au port spécifiés
     if (bind(_server_fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
         throw std::runtime_error("Bind failed");
     }
 
-    // Passage du socket en mode non bloquant
     fcntl(_server_fd, F_SETFL, O_NONBLOCK);
 
-    // Définition du socket en mode écoute (listen)
     if (listen(_server_fd, SOMAXCONN) < 0) {
         throw std::runtime_error("Listen failed");
     }
 
-    // Initialisation de la structure pollfd pour le socket serveur
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        _fds[i].fd = -1;
+    }
     _fds[0].fd = _server_fd;
     _fds[0].events = POLLIN;
 }
 
-// Destructeur
+// Destructor
 Server::~Server()
 {
-    // Fermeture du socket serveur
     close(_server_fd);
 }
 
-// Méthode pour démarrer le serveur
+// Method to start the server
 void Server::run()
 {
     _running = true;
     std::cout << "Server started on port " << _port << std::endl;
 
     while (_running) {
-        int poll_count = poll(_fds, MAX_CLIENTS, -1);  // Attend indéfiniment un événement
+        int poll_count = poll(_fds, MAX_CLIENTS, -1);
 
         if (poll_count == -1) {
             std::cerr << "Poll failed" << std::endl;
             continue;
         }
 
-        // Vérification des événements pour chaque socket
         for (int i = 0; i < MAX_CLIENTS; ++i) {
             if (_fds[i].revents & POLLIN) {
                 if (_fds[i].fd == _server_fd) {
-                    // Nouvelle connexion entrante
                     acceptNewConnection();
                 } else {
-                    // Réception de données d'un client existant
                     handleClientData(i);
                 }
             }
@@ -81,99 +76,145 @@ void Server::run()
     }
 }
 
-// Méthode pour accepter une nouvelle connexion entrante
+// Method to accept a new incoming connection
 void Server::acceptNewConnection()
 {
-    int new_socket = accept(_server_fd, nullptr, nullptr);
+    int new_socket = accept(_server_fd, NULL, NULL);
     if (new_socket < 0) {
         std::cerr << "Accept failed" << std::endl;
         return;
     }
 
-    // Passage du nouveau socket en mode non bloquant
     fcntl(new_socket, F_SETFL, O_NONBLOCK);
 
-    // Ajout du nouveau socket à la liste des fds à surveiller
     for (int i = 1; i < MAX_CLIENTS; ++i) {
-        if (_fds[i].fd == 0) {
+        if (_fds[i].fd == -1) {
             _fds[i].fd = new_socket;
             _fds[i].events = POLLIN;
+            _clients.push_back(Client(new_socket));
             std::cout << "New client connected: " << new_socket << std::endl;
             break;
         }
     }
 }
 
-void Server::handleClientData(int client_index) {
+// Method to handle data received from a client
+void Server::handleClientData(int client_index)
+{
     char buffer[1024];
-    int valread = read(_fds[client_index].fd, buffer, sizeof(buffer));
+    int valread = read(_fds[client_index].fd, buffer, sizeof(buffer) - 1);
 
     if (valread <= 0) {
-        // Erreur ou déconnexion du client
         if (valread == 0) {
             std::cout << "Client disconnected: " << _fds[client_index].fd << std::endl;
         } else {
             std::cerr << "Read error from client: " << _fds[client_index].fd << std::endl;
         }
 
-        // Fermeture du socket client
         close(_fds[client_index].fd);
-        _fds[client_index].fd = 0;
+        _fds[client_index].fd = -1;
 
-        // Supprimer le client de la liste _clients si nécessaire
-        _clients.erase(_clients.begin() + client_index);
+        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+            if (it->getSocket() == _fds[client_index].fd) {
+                _clients.erase(it);
+                break;
+            }
+        }
+
     } else {
-        // Traitement des données reçues du client
         buffer[valread] = '\0';
-        std::cout << "Received from client " << _fds[client_index].fd << ": " << buffer << std::endl;
+        std::cout << "Received from client " << _fds[client_index].fd << ": " << buffer;
 
-        // Interpréter la commande IRC
-             if (strncmp(buffer, "/join ", 6) == 0) {
+        // Handle IRC registration commands
+        if (strncmp(buffer, "NICK ", 5) == 0) {
+            handleNickCommand(client_index, buffer);
+        } else if (strncmp(buffer, "USER ", 5) == 0) {
+            handleUserCommand(client_index, buffer);
+        } else if (strncmp(buffer, "CAP LS", 6) == 0) {
+            std::string response = ":server CAP * LS :multi-prefix\r\n";
+            send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+        } else if (strncmp(buffer, "JOIN ", 5) == 0) {
             std::string command(buffer);
-            std::istringstream iss(command.substr(6)); // Ignorer le préfixe /JOIN
+            std::istringstream iss(command.substr(6));
 
             std::string channelName;
             iss >> channelName;
 
             if (!channelName.empty()) {
-                // Vérifier si le premier caractère est un # pour créer un canal
-                if (channelName[0] == '#') {
+                if (!findChannel(channelName)) {
                     createChannel(channelName);
                     joinChannel(channelName, _clients[client_index]);
                 } else {
+     
                     joinChannel(channelName, _clients[client_index]);
                 }
             }
-        } else if (strncmp(buffer, "/PART ", 6) == 0) {
-            // Implémenter la logique pour quitter un canal
-        } else if (strncmp(buffer, "/PRIVMSG ", 9) == 0) {
-            // Implémenter la logique pour envoyer un message privé
+        } else if (strncmp(buffer, "/part ", 6) == 0) {
+            // Implement logic to leave a channel
+        } else if (strncmp(buffer, "/privmsg ", 9) == 0) {
+            // Implement logic to send a private message
         } else {
-            // Echo vers tous les autres clients connectés
-            for (size_t i = 1; i < MAX_CLIENTS; ++i) {
-            if (_fds[i].fd > 0 && i != static_cast<size_t>(client_index)) {
-                send(_fds[i].fd, buffer, valread, 0);
+            for (int i = 1; i < MAX_CLIENTS; ++i) {
+                if (_fds[i].fd > 0 && i != client_index) {
+                    send(_fds[i].fd, buffer, valread, 0);
                 }
             }
         }
     }
 }
 
-void Server::handleNewConnection(int socket) {
+void Server::handleNickCommand(int client_index, const char* buffer)
+{
+    std::string nick(buffer + 5);
+    nick.erase(std::remove(nick.begin(), nick.end(), '\r'), nick.end());
+    nick.erase(std::remove(nick.begin(), nick.end(), '\n'), nick.end());
+
+    _clients[client_index].setNick(nick);
+
+    // Check if both NICK and USER commands have been received
+    if (!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+        sendWelcomeMessage(client_index);
+    }
+}
+
+void Server::handleUserCommand(int client_index, const char* buffer)
+{
+    std::string user(buffer + 5);
+    std::istringstream iss(user);
+    std::string username;
+    iss >> username;
+
+    _clients[client_index].setUsername(username);
+
+    // Check if both NICK and USER commands have been received
+    if (!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+        sendWelcomeMessage(client_index);
+    }
+}
+
+void Server::sendWelcomeMessage(int client_index)
+{
+    std::string welcome = ":server 001 " + _clients[client_index].getNick() + " :Welcome to the IRC server\r\n";
+    send(_fds[client_index].fd, welcome.c_str(), welcome.length(), 0);
+}
+
+void Server::handleNewConnection(int socket)
+{
     Client newClient(socket);
     _clients.push_back(newClient);
     std::cout << "New client connected: " << socket << std::endl;
 }
 
-void Server::handleClientData(Client& client, const std::string& data) {
+void Server::handleClientData(Client& client, const std::string& data)
+{
     std::cout << "Data received from client " << client.getSocket() << ": " << data << std::endl;
     // Handle the data received from the client
 }
 
-void Server::handleClientDisconnect(Client& client) {
+void Server::handleClientDisconnect(Client& client)
+{
     std::cout << "Client disconnected: " << client.getSocket() << std::endl;
-    std::vector<Client>::iterator it;
-    for (it = _clients.begin(); it != _clients.end(); ++it) {
+    for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
         if (*it == client) {
             _clients.erase(it);
             break;
@@ -181,32 +222,33 @@ void Server::handleClientDisconnect(Client& client) {
     }
 }
 
-void Server::createChannel(const std::string& name) {
+void Server::createChannel(const std::string& name)
+{
+    std::cout << "Creating Channel: " << name << std::endl;
     Channel newChannel(name);
     _channels.push_back(newChannel);
     std::cout << "Channel created: " << name << std::endl;
 }
 
-void Server::joinChannel(const std::string& channelName, const Client& client) {
+void Server::joinChannel(const std::string& channelName, const Client& client)
+{
     std::cout << "Trying to join channel: " << channelName << std::endl;
     Channel* channel = findChannel(channelName);
     if (channel) {
         std::cout << "Channel found: " << channelName << std::endl;
         try {
             channel->addClient(client);
-            
             std::cout << "Client " << client.getSocket() << " joined channel " << channelName << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "Failed to add client to channel " << channelName << ": " << e.what() << std::endl;
         }
     } else {
         std::cerr << "Channel not found: " << channelName << std::endl;
-        // Optionally, throw an exception or return a status indicating failure
     }
 }
 
-
-void Server::leaveChannel(const std::string& channelName, const Client& client) {
+void Server::leaveChannel(const std::string& channelName, const Client& client)
+{
     Channel* channel = findChannel(channelName);
     if (channel) {
         channel->removeClient(client);
@@ -216,17 +258,13 @@ void Server::leaveChannel(const std::string& channelName, const Client& client) 
     }
 }
 
-Channel* Server::findChannel(const std::string& channelName) {
-    std::vector<Channel>::iterator it = _channels.begin();
-    while (it != _channels.end()) {
+Channel* Server::findChannel(const std::string& channelName)
+{
+    for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
         if (it->getName() == channelName) {
             return &(*it);
         }
-        ++it;
     }
     std::cerr << "Channel not found: " << channelName << std::endl;
     return NULL;
 }
-
-
-
