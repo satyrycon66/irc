@@ -114,18 +114,18 @@ void Server::handleClientData(int client_index)
         close(_fds[client_index].fd);
         _fds[client_index].fd = -1;
 
+        // Supprimer le client de la liste des clients
         for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
             if (it->getSocket() == _fds[client_index].fd) {
                 _clients.erase(it);
                 break;
             }
         }
-
     } else {
         buffer[valread] = '\0';
         std::cout << "Received from client " << _fds[client_index].fd << ": " << buffer;
 
-        // Handle IRC registration commands
+        // Traiter les commandes IRC
         if (strncmp(buffer, "NICK ", 5) == 0) {
             handleNickCommand(client_index, buffer);
         } else if (strncmp(buffer, "USER ", 5) == 0) {
@@ -135,7 +135,7 @@ void Server::handleClientData(int client_index)
             send(_fds[client_index].fd, response.c_str(), response.length(), 0);
         } else if (strncmp(buffer, "JOIN ", 5) == 0) {
             std::string command(buffer);
-            std::istringstream iss(command.substr(6));
+            std::istringstream iss(command.substr(5)); // Ignorer le préfixe /JOIN
 
             std::string channelName;
             iss >> channelName;
@@ -143,17 +143,21 @@ void Server::handleClientData(int client_index)
             if (!channelName.empty()) {
                 if (!findChannel(channelName)) {
                     createChannel(channelName);
-                    joinChannel(channelName, _clients[client_index]);
-                } else {
-     
-                    joinChannel(channelName, _clients[client_index]);
                 }
+                joinChannel(channelName, _clients[client_index]);
             }
+        } else if (strncmp(buffer, "MODE ", 5) == 0) {
+            // Implémenter la gestion du mode du channel
+        } else if (strncmp(buffer, "PING ", 5) == 0) {
+            // Répondre au message PING du client
+            std::string pongResponse = "PONG " + std::string(buffer + 5) + "\r\n";
+            send(_fds[client_index].fd, pongResponse.c_str(), pongResponse.length(), 0);
         } else if (strncmp(buffer, "/part ", 6) == 0) {
-            // Implement logic to leave a channel
+            // Implémenter la logique pour quitter un canal
         } else if (strncmp(buffer, "/privmsg ", 9) == 0) {
-            // Implement logic to send a private message
+            // Implémenter la logique pour envoyer un message privé
         } else {
+            // Par défaut, diffuser le message à tous les clients sauf l'expéditeur
             for (int i = 1; i < MAX_CLIENTS; ++i) {
                 if (_fds[i].fd > 0 && i != client_index) {
                     send(_fds[i].fd, buffer, valread, 0);
@@ -222,13 +226,23 @@ void Server::handleClientDisconnect(Client& client)
     }
 }
 
-void Server::createChannel(const std::string& name)
-{
+void Server::createChannel(const std::string& name) {
     std::cout << "Creating Channel: " << name << std::endl;
     Channel newChannel(name);
     _channels.push_back(newChannel);
+
     std::cout << "Channel created: " << name << std::endl;
+
+    // Construire et envoyer les messages JOIN et MODE à tous les clients connectés
+    std::string joinMessage = ":" + std::string("server") + " JOIN " + name + "\r\n";
+    std::string modeMessage = ":" + std::string("server") + " MODE " + name + " +nt\r\n";
+
+    for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        send(it->getSocket(), joinMessage.c_str(), joinMessage.length(), 0);
+        send(it->getSocket(), modeMessage.c_str(), modeMessage.length(), 0);
+    }
 }
+
 
 void Server::joinChannel(const std::string& channelName, const Client& client)
 {
@@ -239,6 +253,28 @@ void Server::joinChannel(const std::string& channelName, const Client& client)
         try {
             channel->addClient(client);
             std::cout << "Client " << client.getSocket() << " joined channel " << channelName << std::endl;
+
+            // Envoyer le message JOIN
+            std::string joinMessage = ":" + client.getNick() + " JOIN " + channelName + "\r\n";
+            send(client.getSocket(), joinMessage.c_str(), joinMessage.length(), 0);
+
+            // Envoyer le message MODE
+            std::string modeMessage = ":server MODE " + channelName + " +nt\r\n";
+            send(client.getSocket(), modeMessage.c_str(), modeMessage.length(), 0);
+
+            // Envoyer le message NAMES
+            std::string namesMessage = ":server 353 " + client.getNick() + " = " + channelName + " :";
+            const std::vector<Client>& channelClients = channel->getClients();
+            for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
+                namesMessage += it->getNick() + " ";
+            }
+            namesMessage += "\r\n";
+            send(client.getSocket(), namesMessage.c_str(), namesMessage.length(), 0);
+
+            // Envoyer le message de fin NAMES
+            std::string endNamesMessage = ":server 366 " + client.getNick() + " " + channelName + " :End of /NAMES list.\r\n";
+            send(client.getSocket(), endNamesMessage.c_str(), endNamesMessage.length(), 0);
+
         } catch (const std::exception& e) {
             std::cerr << "Failed to add client to channel " << channelName << ": " << e.what() << std::endl;
         }
@@ -246,6 +282,8 @@ void Server::joinChannel(const std::string& channelName, const Client& client)
         std::cerr << "Channel not found: " << channelName << std::endl;
     }
 }
+
+
 
 void Server::leaveChannel(const std::string& channelName, const Client& client)
 {

@@ -45,5 +45,9 @@ void Channel::broadcastMessage(const std::string& message , const Client& sender
     }
 }
 
+const std::vector<Client>& Channel::getClients() const {
+    return _clients;
+}
+
 // Autres méthodes de la classe Channel
 
