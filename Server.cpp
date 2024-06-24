@@ -129,13 +129,50 @@ void Server::handleClientData(int client_index)
         // Traiter les commandes IRC
         if (strncmp(buffer, "NICK ", 5) == 0) {
             handleNickCommand(client_index, buffer);
-        } else if (strncmp(buffer, "USER ", 5) == 0) {
+        }  else if (strncmp(buffer, "INVITE ", 7) == 0) {
+    std::string command(buffer);
+    std::istringstream iss(command.substr(7)); // Ignorer le préfixe INVITE
+
+    std::string nick;
+    std::string channelName;
+    iss >> nick; // Récupérer le nick à inviter
+    iss >> channelName; // Récupérer le nom du canal
+
+    if (!nick.empty() && !channelName.empty()) {
+        // Trouver le client invité dans la liste des clients
+        Client* invitedClient = nullptr;
+        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+            if (it->getNick() == nick) {
+                invitedClient = &(*it);
+                break;
+            }
+        }
+
+        if (invitedClient) {
+            // Envoyer le message d'invitation au client qui a envoyé la commande
+            std::string inviteMessage = ":server INVITE " + nick + " " + channelName + "\r\n";
+            send(_fds[client_index].fd, inviteMessage.c_str(), inviteMessage.length(), 0);
+
+            // Envoyer le message d'invitation au client invité
+            std::string notifyMessage = ":" + _clients[client_index].getNick() + " INVITE " + nick + " :" + channelName + "\r\n";
+            send(invitedClient->getSocket(), notifyMessage.c_str(), notifyMessage.length(), 0);
+        } else {
+            // Gestion de l'erreur : le client invité n'est pas trouvé
+            std::cerr << "Error: Client to invite not found" << std::endl;
+        }
+    } else {
+        // Gestion de l'erreur : la commande INVITE est malformée
+        std::cerr << "Error: Malformed INVITE command" << std::endl;
+    }
+}
+
+         else if (strncmp(buffer, "USER ", 5) == 0) {
             handleUserCommand(client_index, buffer);
         } else if (strncmp(buffer, "CAP LS", 6) == 0) {
             std::string response = ":server CAP * LS :multi-prefix\r\n";
             send(_fds[client_index].fd, response.c_str(), response.length(), 0);
         }else if (strncmp(buffer, "PRIVMSG ", 8) == 0) {
-            handlePrivMsgCommand(client_index, buffer);
+            handlePrivMsgCommand(client_index, buffer,_clients[client_index]);
         } else if (strncmp(buffer, "JOIN ", 5) == 0) {
             std::string command(buffer);
             std::istringstream iss(command.substr(5)); // Ignorer le préfixe /JOIN
@@ -178,9 +215,7 @@ void Server::handleClientData(int client_index)
             std::cerr << "Channel not found: " << channelName << std::endl;
         }
     }
-}else if (strncmp(buffer, "/privmsg ", 9) == 0) {
-            // Implémenter la logique pour envoyer un message privé
-        } else {
+}else {
             // Par défaut, diffuser le message à tous les clients sauf l'expéditeur
             for (int i = 1; i < MAX_CLIENTS; ++i) {
                 if (_fds[i].fd > 0 && i != client_index) {
@@ -191,7 +226,49 @@ void Server::handleClientData(int client_index)
     }
 }
 
-void Server::handlePrivMsgCommand(int client_index, const char* buffer) {
+void Server::handleInviteCommand(int client_index, const char* buffer) {
+    std::string command(buffer);
+    std::istringstream iss(command.substr(8)); // Ignore "/invite "
+
+    std::string nick;
+    iss >> nick;
+
+    std::string channelName;
+    iss >> channelName;
+
+    if (!nick.empty() && !channelName.empty()) {
+        // Trouver le client destinataire
+        bool found = false;
+        for (size_t i = 0; i < _clients.size(); ++i) {
+            if (_clients[i].getNick() == nick) {
+                // Trouver ou créer le canal
+                Channel* channel = findChannel(channelName);
+                if (!channel) {
+                    createChannel(channelName);
+                    channel = findChannel(channelName);
+                }
+                if (channel) {
+                    // Inviter le client au canal
+                    joinChannel(channelName, _clients[i]);
+
+                    // Envoyer un message de confirmation à l'inviteur
+                    std::string response = ":server 341 " + _clients[client_index].getNick() + " " + _clients[i].getNick() + " :" + channelName + " Invitation sent\r\n";
+                    ::send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            // Client non trouvé
+            std::cerr << "Client not found: " << nick << std::endl;
+        }
+    }
+}
+
+
+void Server::handlePrivMsgCommand(int client_index, const char* buffer ,const Client& client) {
     std::string command(buffer);
     
     // Find PRIVMSG command and extract target and message
@@ -232,11 +309,11 @@ void Server::handlePrivMsgCommand(int client_index, const char* buffer) {
     }
     
     // Example: Send the message to all clients in the channel
-    sendChannelMessage(channelName, message, _fds[client_index].fd);
+    sendChannelMessage(channelName, message, _fds[client_index].fd,client);
 }
     
   
-void Server::sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket) {
+void Server::sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client) {
     // Find the channel in _channels map
     Channel* channel = findChannel(channelName);
     if (!channel) {
@@ -262,7 +339,7 @@ for (socketIt = clientSockets.begin(); socketIt != clientSockets.end(); ++socket
 
         // Check bounds to avoid out-of-range access
         if (clientIndex >= 0 && clientIndex < clients.size()) {
-            std::string messageToSend = ":" + clients[clientIndex].getNick() + " PRIVMSG " + channelName + " :" + message + "\r\n";
+            std::string messageToSend = ":" + client.getNick() + " PRIVMSG " + channelName + " :" + message + "\r\n";
             send(clientSocket, messageToSend.c_str(), messageToSend.length(), 0);
         }
     }
