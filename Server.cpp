@@ -164,7 +164,32 @@ void Server::handleClientData(int client_index)
         // Gestion de l'erreur : la commande INVITE est malformée
         std::cerr << "Error: Malformed INVITE command" << std::endl;
     }
-}
+}else if (strncmp(buffer, "TOPIC ", 6) == 0) {
+            std::string command(buffer);
+            std::istringstream iss(command.substr(6));
+
+            std::string channelName;
+            iss >> channelName;
+
+            Channel* channel = findChannel(channelName);
+            if (channel) {
+                size_t pos = command.find(" :");
+                if (pos != std::string::npos) {
+                    std::string topic = command.substr(pos + 2);
+                    channel->setTopic(topic);
+
+                    // Broadcast the new topic to all channel members
+                    std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
+                    channel->broadcastMessage(topicMessage, _clients[client_index]);
+                } else {
+                    // Send the current topic to the requesting client
+                    std::string topicMessage = ":server 332 " + _clients[client_index].getNick() + " " + channelName + " :" + channel->getTopic() + "\r\n";
+                    send(_fds[client_index].fd, topicMessage.c_str(), topicMessage.length(), 0);
+                }
+            } else {
+                std::cerr << "Channel not found: " << channelName << std::endl;
+            }
+        } 
 
          else if (strncmp(buffer, "USER ", 5) == 0) {
             handleUserCommand(client_index, buffer);

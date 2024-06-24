@@ -69,5 +69,12 @@ const std::vector<Client>& Channel::getClients() const {
     return this->_clients;
 }
 
+const std::string& Channel::getTopic() const {
+    return _topic;
+}
+
+void Channel::setTopic(const std::string& topic) {
+    _topic = topic;
+}
 // Autres méthodes de la classe Channel
 
