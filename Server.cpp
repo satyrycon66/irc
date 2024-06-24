@@ -273,7 +273,7 @@ void Server::handleNickCommand(int client_index, const char* buffer)
     std::string nick(buffer + 5);
     nick.erase(std::remove(nick.begin(), nick.end(), '\r'), nick.end());
     nick.erase(std::remove(nick.begin(), nick.end(), '\n'), nick.end());
-
+    
     _clients[client_index].setNick(nick);
 
     // Check if both NICK and USER commands have been received
@@ -359,7 +359,7 @@ void Server::joinChannel(const std::string& channelName, const Client& client)
             std::string joinMessage = ":" + client.getNick() + " JOIN " + channelName + "\r\n";
 
             // Envoyer le message JOIN à tous les clients du canal
-            const std::vector<Client>& channelClients = channel->getClients();
+            const std::vector<Client> channelClients = channel->getClients();
             for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
                 std::cout << "Sending JOIN message to client: " << it->getSocket() << std::endl; // Message de débogage
                 send(it->getSocket(), joinMessage.c_str(), joinMessage.length(), 0);

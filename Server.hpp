@@ -33,7 +33,8 @@ private:
     struct pollfd _fds[MAX_CLIENTS];
     std::vector<Client> _clients;
     std::vector<Channel> _channels;
-
+    struct sockaddr_in *_address;
+    
     void acceptNewConnection();
     void handleClientData(int client_index);
     Channel* findChannel(const std::string& channelName);
