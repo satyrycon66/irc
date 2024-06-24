@@ -21,8 +21,10 @@ public:
     void joinChannel(const std::string& channelName, const Client& client);
     void leaveChannel(const std::string& channelName, const Client& client);
     void handleNickCommand(int client_index, const char* buffer);
+    void handlePrivMsgCommand(int client_index, const char* buffer);
     void handleUserCommand(int client_index, const char* buffer);
     void sendWelcomeMessage(int client_index);
+    void sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket);
 private:
     int _port;
     std::string _password;

@@ -56,8 +56,17 @@ bool Channel::hasClient(const Client& client) const {
     return false;
 }
 
+std::vector<int> Channel::getSockets() const {
+        // std::vector<Client> clients = getClients();
+        std::vector<int> sockets;
+        std::vector<Client>::const_iterator it;
+        for (it = _clients.begin(); it != _clients.end(); ++it) {
+            sockets.push_back(it->getSocket());
+        }
+        return sockets;
+    }
 const std::vector<Client>& Channel::getClients() const {
-    return _clients;
+    return this->_clients;
 }
 
 // Autres méthodes de la classe Channel

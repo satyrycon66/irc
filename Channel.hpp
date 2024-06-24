@@ -17,6 +17,7 @@ public:
     void removeClient(const Client& client);
     void broadcastMessage(const std::string& message, const Client& sender);
     const std::vector<Client>& getClients() const ;
+    std::vector<int> getSockets() const ;
 
 private:
     std::string _name;

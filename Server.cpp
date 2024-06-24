@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <vector>
+#include <map>
 #include <sstream>
 
 #define MAX_CLIENTS 100
@@ -133,6 +134,8 @@ void Server::handleClientData(int client_index)
         } else if (strncmp(buffer, "CAP LS", 6) == 0) {
             std::string response = ":server CAP * LS :multi-prefix\r\n";
             send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+        }else if (strncmp(buffer, "PRIVMSG ", 8) == 0) {
+            handlePrivMsgCommand(client_index, buffer);
         } else if (strncmp(buffer, "JOIN ", 5) == 0) {
             std::string command(buffer);
             std::istringstream iss(command.substr(5)); // Ignorer le préfixe /JOIN
@@ -188,6 +191,83 @@ void Server::handleClientData(int client_index)
     }
 }
 
+void Server::handlePrivMsgCommand(int client_index, const char* buffer) {
+    std::string command(buffer);
+    
+    // Find PRIVMSG command and extract target and message
+    size_t pos = command.find("PRIVMSG ");
+    if (pos == std::string::npos) {
+        std::cerr << "Invalid PRIVMSG command format" << std::endl;
+        return;
+    }
+    
+    // Move the position past "PRIVMSG "
+    pos += 8;
+    
+    // Find end of target (channel name)
+    size_t end_pos = command.find_first_of(" :", pos);
+    if (end_pos == std::string::npos) {
+        std::cerr << "Invalid PRIVMSG command format" << std::endl;
+        return;
+    }
+    
+    std::string channelName = command.substr(pos, end_pos - pos);
+    
+    // Find the message content
+    std::string message;
+    pos = command.find(" :", end_pos);
+    if (pos != std::string::npos) {
+        message = command.substr(pos + 2); // Skip " :"
+    } else {
+        std::cerr << "Invalid PRIVMSG command format" << std::endl;
+        return;
+    }
+    
+    std::cout << "Received PRIVMSG command from client " << _fds[client_index].fd << " to channel: " << channelName << ", message: " << message << std::endl;
+    
+    // Check if channelName is valid (e.g., starts with # for IRC channels)
+    if (channelName.empty() || channelName[0] != '#') {
+        std::cerr << "Invalid channel name in PRIVMSG command" << std::endl;
+        return;
+    }
+    
+    // Example: Send the message to all clients in the channel
+    sendChannelMessage(channelName, message, _fds[client_index].fd);
+}
+    
+  
+void Server::sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket) {
+    // Find the channel in _channels map
+    Channel* channel = findChannel(channelName);
+    if (!channel) {
+        std::cerr << "Channel not found: " << channelName << std::endl;
+        return;
+    }
+
+    // Get the list of clients in the channel
+    const std::vector<int> clientSockets = channel->getSockets();
+const std::vector<Client> clients = channel->getClients();
+
+// Send the message to all clients in the channel
+std::vector<int>::const_iterator socketIt;
+std::vector<Client>::const_iterator clientIt;
+
+for (socketIt = clientSockets.begin(); socketIt != clientSockets.end(); ++socketIt) {
+    int clientSocket = *socketIt;
+
+    // Exclude the sender from receiving their own message
+    if (clientSocket != senderSocket) {
+        // Find the index of the client in the clients vector
+        int clientIndex = clientSocket - 4; // Assuming 4 is the offset for the client socket in your example
+
+        // Check bounds to avoid out-of-range access
+        if (clientIndex >= 0 && clientIndex < clients.size()) {
+            std::string messageToSend = ":" + clients[clientIndex].getNick() + " PRIVMSG " + channelName + " :" + message + "\r\n";
+            send(clientSocket, messageToSend.c_str(), messageToSend.length(), 0);
+        }
+    }
+}
+}
 void Server::handleNickCommand(int client_index, const char* buffer)
 {
     std::string nick(buffer + 5);
