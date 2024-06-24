@@ -275,24 +275,29 @@ void Server::joinChannel(const std::string& channelName, const Client& client)
             channel->addClient(client);
             std::cout << "Client " << client.getSocket() << " joined channel " << channelName << std::endl;
 
-            // Envoyer le message JOIN
+            // Construire le message JOIN
             std::string joinMessage = ":" + client.getNick() + " JOIN " + channelName + "\r\n";
-            send(client.getSocket(), joinMessage.c_str(), joinMessage.length(), 0);
 
-            // Envoyer le message MODE
+            // Envoyer le message JOIN à tous les clients du canal
+            const std::vector<Client>& channelClients = channel->getClients();
+            for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
+                std::cout << "Sending JOIN message to client: " << it->getSocket() << std::endl; // Message de débogage
+                send(it->getSocket(), joinMessage.c_str(), joinMessage.length(), 0);
+            }
+
+            // Envoyer le message MODE au client qui a rejoint
             std::string modeMessage = ":server MODE " + channelName + " +nt\r\n";
             send(client.getSocket(), modeMessage.c_str(), modeMessage.length(), 0);
 
-            // Envoyer le message NAMES
+            // Construire et envoyer le message NAMES au client qui a rejoint
             std::string namesMessage = ":server 353 " + client.getNick() + " = " + channelName + " :";
-            const std::vector<Client>& channelClients = channel->getClients();
             for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
                 namesMessage += it->getNick() + " ";
             }
             namesMessage += "\r\n";
             send(client.getSocket(), namesMessage.c_str(), namesMessage.length(), 0);
 
-            // Envoyer le message de fin NAMES
+            // Envoyer le message de fin NAMES au client qui a rejoint
             std::string endNamesMessage = ":server 366 " + client.getNick() + " " + channelName + " :End of /NAMES list.\r\n";
             send(client.getSocket(), endNamesMessage.c_str(), endNamesMessage.length(), 0);
 
@@ -306,18 +311,29 @@ void Server::joinChannel(const std::string& channelName, const Client& client)
 
 
 
+
 void Server::leaveChannel(const std::string& channelName, const Client& client)
 {
     Channel* channel = findChannel(channelName);
     if (channel) {
         if (channel->hasClient(client)) {
-            channel->removeClient(client);
-            std::cout << "Client " << client.getSocket() << " left channel " << channelName << std::endl;
-
-            // Envoyer le message PART au client
             std::string partMessage = ":" + client.getNick() + "!~" + client.getUsername() + "@localhost PART " + channelName + "\r\n";
+
+            // Envoyer le message PART à tous les autres clients dans le canal
+            std::vector<Client>::const_iterator it;
+            for (it = channel->getClients().begin(); it != channel->getClients().end(); ++it) {
+                const Client& chanClient = *it;
+                if (chanClient.getSocket() != client.getSocket()) {
+                    send(chanClient.getSocket(), partMessage.c_str(), partMessage.length(), 0);
+                }
+            }
+
+            // Envoyer le message PART au client lui-même
             send(client.getSocket(), partMessage.c_str(), partMessage.length(), 0);
 
+            // Supprimer le client du canal
+            channel->removeClient(client);
+            std::cout << "Client " << client.getSocket() << " left channel " << channelName << std::endl;
         } else {
             std::cerr << "Client " << client.getSocket() << " is not in channel " << channelName << std::endl;
         }
@@ -325,6 +341,7 @@ void Server::leaveChannel(const std::string& channelName, const Client& client)
         std::cerr << "Channel not found: " << channelName << std::endl;
     }
 }
+
 
 Channel* Server::findChannel(const std::string& channelName)
 {

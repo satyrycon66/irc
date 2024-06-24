@@ -31,3 +31,10 @@ private:
 };
 
 #endif // CLIENT_HPP
+
+
+// /server add IRC5 localhost/6667 -notls
+// /set irc.server.IRC5.password secret
+// /set irc.server.IRC5.nicks sim
+// /set irc.server.IRC5.username simon
+// /connect IRC5
