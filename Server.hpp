@@ -26,6 +26,10 @@ public:
     void sendWelcomeMessage(int client_index);
    void sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client);
    void handleInviteCommand(int client_index, const char* buffer);
+   void handleJoinCommand(const char* buffer, int client_index) ;
+   void handlePartCommand(const char* buffer, int client_index) ;
+   void handleTopicCommand(const char* buffer, int client_index) ;
+   void handleInviteCommand(const char* buffer, int client_index) ;
 private:
     int _port;
     std::string _password;
@@ -35,6 +39,7 @@ private:
     std::vector<Client> _clients;
     std::vector<Channel> _channels;
     struct sockaddr_in *_address;
+    
     
     void acceptNewConnection();
     void handleClientData(int client_index);

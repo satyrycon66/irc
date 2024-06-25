@@ -78,26 +78,41 @@ void Server::run()
 }
 
 // Method to accept a new incoming connection
-void Server::acceptNewConnection()
-{
+void Server::acceptNewConnection() {
     int new_socket = accept(_server_fd, NULL, NULL);
     if (new_socket < 0) {
-        std::cerr << "Accept failed" << std::endl;
+        std::cerr << "Accept failed: " << strerror(errno) << std::endl;
         return;
     }
 
-    fcntl(new_socket, F_SETFL, O_NONBLOCK);
+    // Set the new socket to non-blocking mode
+    if (fcntl(new_socket, F_SETFL, O_NONBLOCK) < 0) {
+        std::cerr << "Failed to set non-blocking mode: " << strerror(errno) << std::endl;
+        close(new_socket);
+        return;
+    }
 
+    // Find an empty slot in the _fds array for the new client
+    bool clientAdded = false;
     for (int i = 1; i < MAX_CLIENTS; ++i) {
         if (_fds[i].fd == -1) {
+
             _fds[i].fd = new_socket;
             _fds[i].events = POLLIN;
             _clients.push_back(Client(new_socket));
             std::cout << "New client connected: " << new_socket << std::endl;
+            clientAdded = true;
             break;
         }
     }
+
+    // If no empty slot is found, close the new socket
+    if (!clientAdded) {
+        std::cerr << "Maximum number of clients reached. Connection refused: " << new_socket << std::endl;
+        close(new_socket);
+    }
 }
+
 
 // Method to handle data received from a client
 void Server::handleClientData(int client_index)
@@ -129,125 +144,36 @@ void Server::handleClientData(int client_index)
         // Traiter les commandes IRC
         if (strncmp(buffer, "NICK ", 5) == 0) {
             handleNickCommand(client_index, buffer);
-        }  else if (strncmp(buffer, "INVITE ", 7) == 0) {
-    std::string command(buffer);
-    std::istringstream iss(command.substr(7)); // Ignorer le préfixe INVITE
-
-    std::string nick;
-    std::string channelName;
-    iss >> nick; // Récupérer le nick à inviter
-    iss >> channelName; // Récupérer le nom du canal
-
-    if (!nick.empty() && !channelName.empty()) {
-        // Trouver le client invité dans la liste des clients
-        Client* invitedClient = nullptr;
-        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-            if (it->getNick() == nick) {
-                invitedClient = &(*it);
-                break;
-            }
-        }
-
-        if (invitedClient) {
-            // Envoyer le message d'invitation au client qui a envoyé la commande
-            std::string inviteMessage = ":server INVITE " + nick + " " + channelName + "\r\n";
-            send(_fds[client_index].fd, inviteMessage.c_str(), inviteMessage.length(), 0);
-
-            // Envoyer le message d'invitation au client invité
-            std::string notifyMessage = ":" + _clients[client_index].getNick() + " INVITE " + nick + " :" + channelName + "\r\n";
-            send(invitedClient->getSocket(), notifyMessage.c_str(), notifyMessage.length(), 0);
-        } else {
-            // Gestion de l'erreur : le client invité n'est pas trouvé
-            std::cerr << "Error: Client to invite not found" << std::endl;
-        }
-    } else {
-        // Gestion de l'erreur : la commande INVITE est malformée
-        std::cerr << "Error: Malformed INVITE command" << std::endl;
-    }
-}else if (strncmp(buffer, "TOPIC ", 6) == 0) {
-            std::string command(buffer);
-            std::istringstream iss(command.substr(6));
-
-            std::string channelName;
-            iss >> channelName;
-
-            Channel* channel = findChannel(channelName);
-            if (channel) {
-                size_t pos = command.find(" :");
-                if (pos != std::string::npos) {
-                    std::string topic = command.substr(pos + 2);
-                    channel->setTopic(topic);
-
-                    // Broadcast the new topic to all channel members
-                    std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
-                    channel->broadcastMessage(topicMessage, _clients[client_index]);
-                } else {
-                    // Send the current topic to the requesting client
-                    std::string topicMessage = ":server 332 " + _clients[client_index].getNick() + " " + channelName + " :" + channel->getTopic() + "\r\n";
-                    send(_fds[client_index].fd, topicMessage.c_str(), topicMessage.length(), 0);
-                }
-            } else {
-                std::cerr << "Channel not found: " << channelName << std::endl;
-            }
-        } 
-
-         else if (strncmp(buffer, "USER ", 5) == 0) {
+        }else if (strncmp(buffer, "INVITE ", 7) == 0) {
+            handleInviteCommand(buffer, client_index);
+        }else if (strncmp(buffer, "TOPIC ", 6) == 0) {
+            handleTopicCommand(buffer, client_index);
+        }else if (strncmp(buffer, "USER ", 5) == 0) {
             handleUserCommand(client_index, buffer);
-        } else if (strncmp(buffer, "CAP LS", 6) == 0) {
+        }else if (strncmp(buffer, "CAP LS ", 6) == 0) {
             std::string response = ":server CAP * LS :multi-prefix\r\n";
             send(_fds[client_index].fd, response.c_str(), response.length(), 0);
         }else if (strncmp(buffer, "PRIVMSG ", 8) == 0) {
             handlePrivMsgCommand(client_index, buffer,_clients[client_index]);
-        } else if (strncmp(buffer, "JOIN ", 5) == 0) {
-            std::string command(buffer);
-            std::istringstream iss(command.substr(5)); // Ignorer le préfixe /JOIN
-
-            std::string channelName;
-            iss >> channelName;
-
-            if (!channelName.empty()) {
-                if (!findChannel(channelName)) {
-                    createChannel(channelName);
-                    
-                }
-                joinChannel(channelName, _clients[client_index]);
-            }
-        } else if (strncmp(buffer, "MODE ", 5) == 0) {
+        }else if (strncmp(buffer, "JOIN ", 5) == 0) {
+            handleJoinCommand(buffer, client_index);
+        }else if (strncmp(buffer, "MODE ", 5) == 0) {
             // Implémenter la gestion du mode du channel
-        } else if (strncmp(buffer, "PING ", 5) == 0) {
+        }else if (strncmp(buffer, "PING ", 5) == 0) {
             // Répondre au message PING du client
             std::string pongResponse = "PONG " + std::string(buffer + 5) + "\r\n";
             send(_fds[client_index].fd, pongResponse.c_str(), pongResponse.length(), 0);
         }else if (strncmp(buffer, "PART ", 5) == 0) {
-    std::string command(buffer);
-    std::istringstream iss(command.substr(5));
-
-    std::string channelName;
-    iss >> channelName;
-
-    if (!channelName.empty()) {
-        Channel* channel = findChannel(channelName);
-        if (channel) {
-            try {
-                leaveChannel(channelName, _clients[client_index]);
-                // Send response to WeeChat indicating success
-                std::string response = ":server PART " + _clients[client_index].getNick() + " :" + channelName + " Leaving channel\r\n";
-                send(_fds[client_index].fd, response.c_str(), response.length(), 0);
-            } catch (const std::exception& e) {
-                std::cerr << "Failed to leave channel " << channelName << ": " << e.what() << std::endl;
-            }
-        } else {
-            std::cerr << "Channel not found: " << channelName << std::endl;
+            handlePartCommand(buffer, client_index);
         }
-    }
-}else {
-            // Par défaut, diffuser le message à tous les clients sauf l'expéditeur
-            for (int i = 1; i < MAX_CLIENTS; ++i) {
-                if (_fds[i].fd > 0 && i != client_index) {
-                    send(_fds[i].fd, buffer, valread, 0);
-                }
-            }
-        }
+        // else {
+        //     // Par défaut, diffuser le message à tous les clients sauf l'expéditeur
+        //     for (int i = 1; i < MAX_CLIENTS; ++i) {
+        //         if (_fds[i].fd > 0 && i != client_index) {
+        //             send(_fds[i].fd, buffer, valread, 0);
+        //         }
+        //     }
+        // }
     }
 }
 
@@ -292,6 +218,20 @@ void Server::handleInviteCommand(int client_index, const char* buffer) {
     }
 }
 
+void Server::handleJoinCommand(const char* buffer, int client_index) {
+    std::string command(buffer);
+    std::istringstream iss(command.substr(5)); // Ignorer le préfixe /JOIN
+
+    std::string channelName;
+    iss >> channelName;
+
+    if (!channelName.empty()) {
+        if (!findChannel(channelName)) {
+            createChannel(channelName);
+        }
+        joinChannel(channelName, _clients[client_index]);
+    }
+}
 
 void Server::handlePrivMsgCommand(int client_index, const char* buffer ,const Client& client) {
     std::string command(buffer);
@@ -534,4 +474,92 @@ Channel* Server::findChannel(const std::string& channelName)
     }
     std::cerr << "Channel not found: " << channelName << std::endl;
     return NULL;
+}
+
+void Server::handlePartCommand(const char* buffer, int client_index) {
+    std::string command(buffer);
+    std::istringstream iss(command.substr(5));
+
+    std::string channelName;
+    iss >> channelName;
+
+    if (!channelName.empty()) {
+        Channel* channel = findChannel(channelName);
+        if (channel) {
+            try {
+                leaveChannel(channelName, _clients[client_index]);
+                // Envoyer la réponse à WeeChat indiquant le succès
+                std::string response = ":server PART " + _clients[client_index].getNick() + " :" + channelName + " Leaving channel\r\n";
+                send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to leave channel " << channelName << ": " << e.what() << std::endl;
+            }
+        } else {
+            std::cerr << "Channel not found: " << channelName << std::endl;
+        }
+    }
+}
+
+void Server::handleTopicCommand(const char* buffer, int client_index) {
+    std::string command(buffer);
+    std::istringstream iss(command.substr(6));
+
+    std::string channelName;
+    iss >> channelName;
+
+    Channel* channel = findChannel(channelName);
+    if (channel) {
+        size_t pos = command.find(" :");
+        if (pos != std::string::npos) {
+            std::string topic = command.substr(pos + 2);
+            channel->setTopic(topic);
+
+            // Diffuser le nouveau sujet à tous les membres du canal
+            std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
+            channel->broadcastMessage(topicMessage, _clients[client_index]);
+        } else {
+            // Envoyer le sujet actuel au client demandeur
+            std::string topicMessage = ":server 332 " + _clients[client_index].getNick() + " " + channelName + " :" + channel->getTopic() + "\r\n";
+            send(_fds[client_index].fd, topicMessage.c_str(), topicMessage.length(), 0);
+        }
+    } else {
+        std::cerr << "Channel not found: " << channelName << std::endl;
+    }
+}
+
+void Server::handleInviteCommand(const char* buffer, int client_index) {
+    std::string command(buffer);
+    std::istringstream iss(command.substr(7)); // Ignorer le préfixe INVITE
+
+    std::string nick;
+    std::string channelName;
+    iss >> nick; // Récupérer le nick à inviter
+    iss >> channelName; // Récupérer le nom du canal
+
+    if (!nick.empty() && !channelName.empty()) {
+        // Trouver le client invité dans la liste des clients
+        Client* invitedClient = nullptr;
+        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+            if (it->getNick() == nick) {
+                invitedClient = &(*it);
+                break;
+            }
+        }
+
+        if (invitedClient) {
+            // Envoyer le message d'invitation au client qui a envoyé la commande
+            std::string inviteMessage = ":server INVITE " + nick + " " + channelName + "\r\n";
+            send(_fds[client_index].fd, inviteMessage.c_str(), inviteMessage.length(), 0);
+
+            // Envoyer le message d'invitation au client invité
+            std::string notifyMessage = ":" + _clients[client_index].getNick() + " INVITE " + nick + " :" + channelName + "\r\n";
+            send(invitedClient->getSocket(), notifyMessage.c_str(), notifyMessage.length(), 0);
+        } else {
+            // Gestion de l'erreur : le client invité n'est pas trouvé
+            std::cerr << "Error: Client to invite not found" << std::endl;
+        }
+    } else {
+        // Gestion de l'erreur : la commande INVITE est malformée
+        std::cerr << "Error: Malformed INVITE command" << std::endl;
+    }
 }
