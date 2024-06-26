@@ -18,12 +18,13 @@ public:
     void broadcastMessage(const std::string& message, const Client& sender);
     const std::vector<Client>& getClients() const ;
     std::vector<int> getSockets() const ;
-       const std::string& getTopic() const;
+    const std::string& getTopic() const;
     void setTopic(const std::string& topic);
+    void setName(const std::string& name);
 
 private:
     std::string _name;
-       std::string _topic;
+    std::string _topic;
     std::vector<Client> _clients;
 
     // Ajoutez d'autres membres ou méthodes privées selon les besoins

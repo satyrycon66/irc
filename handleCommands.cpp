@@ -192,7 +192,7 @@ void Server::handleTopicCommand(const char* buffer, int client_index) {
 
             // Diffuser le nouveau sujet à tous les membres du canal
             std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
-            channel->broadcastMessage(topicMessage, _clients[client_index]);
+            sendChannelMessage(channelName, topicMessage, _clients[client_index].getSocket(),_clients[client_index]);
         } else {
             // Envoyer le sujet actuel au client demandeur
             std::string topicMessage = ":server 332 " + _clients[client_index].getNick() + " " + channelName + " :" + channel->getTopic() + "\r\n";

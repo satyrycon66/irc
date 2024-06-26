@@ -1,29 +1,30 @@
 #include "Channel.hpp"
 
 // Constructeur
-Channel::Channel(const std::string& name) : _name(name) {
-    // Initialisation éventuelle
+Channel::Channel(const std::string& name) : _name(name) {return ; }
+
+Channel::~Channel() { return ;}
+
+const std::string& Channel::getName() const {    return _name;}
+const std::string& Channel::getTopic() const {    return _topic;}
+const std::vector<Client>& Channel::getClients() const {    return this->_clients;}
+std::vector<int> Channel::getSockets() const {
+        std::vector<int> sockets;
+        std::vector<Client>::const_iterator it;
+        for (it = _clients.begin(); it != _clients.end(); ++it) {
+            sockets.push_back(it->getSocket());}
+        return sockets;
 }
 
-Channel::~Channel() {
-    // Code de destruction, si nécessaire
-}
-
-const std::string& Channel::getName() const {
-    return _name;
-}
+void Channel::setTopic(const std::string& topic) {    _topic = topic;}
+void Channel::setName(const std::string& name) {    _name = name;}
 
 // Méthode pour ajouter un client
-void Channel::addClient(const Client& client) {
-    _clients.push_back(client);
-}
+void Channel::addClient(const Client& client) {   _clients.push_back(client);}
 
 // Méthode pour retirer un client
 void Channel::removeClient(const Client& client) {
-    // Utilisation d'un itérateur explicite
     for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        // Suppression du client en comparant les attributs pertinents (ex: nom d'utilisateur)
-        // Exemple imaginaire : if (it->getUsername() == client.getUsername())
         if (*it == client) {
             _clients.erase(it);
             break;
@@ -31,50 +32,16 @@ void Channel::removeClient(const Client& client) {
     }
 }
 
-// Méthode pour diffuser un message à tous les clients sauf l'expéditeur
-void Channel::broadcastMessage(const std::string& message , const Client& sender) {
-    // Utilisation d'un itérateur explicite
-            std::cout << message + "***";
-    for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        // Diffusion du message à tous les clients sauf à l'expéditeur
-        // Exemple imaginaire : if (it->getUsername() != sender.getUsername())
-
-            std::cout << message + "***";
-            // Exemple imaginaire : it->sendMessage(message);
-        
-    }
-}
-
 bool Channel::hasClient(const Client& client) const {
-    // Implémentation de la méthode
-    // Vérifie si le client est présent dans le vecteur _clients
     for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        if (*it == client) {
-            return true;
-        }
+        if (*it == client)
+            return true;    
     }
     return false;
 }
 
-std::vector<int> Channel::getSockets() const {
-        // std::vector<Client> clients = getClients();
-        std::vector<int> sockets;
-        std::vector<Client>::const_iterator it;
-        for (it = _clients.begin(); it != _clients.end(); ++it) {
-            sockets.push_back(it->getSocket());
-        }
-        return sockets;
-    }
-const std::vector<Client>& Channel::getClients() const {
-    return this->_clients;
-}
 
-const std::string& Channel::getTopic() const {
-    return _topic;
-}
 
-void Channel::setTopic(const std::string& topic) {
-    _topic = topic;
-}
+
 // Autres méthodes de la classe Channel
 

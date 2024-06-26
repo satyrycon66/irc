@@ -20,3 +20,15 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
+// /server add IRC5 localhost/6667 -notls
+// /set irc.server.IRC5.password secret
+// /set irc.server.IRC5.nicks sim
+// /set irc.server.IRC5.username simon
+// /connect IRC5
+
+// /server add IRC localhost/6667 -notls
+// /set irc.server.IRC.password asd
+// /set irc.server.IRC.nicks al
+// /set irc.server.IRC.username alexis
+// /connect IRC
