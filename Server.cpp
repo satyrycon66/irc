@@ -1,23 +1,11 @@
 #include "Server.hpp"
-#include <iostream>
-#include <stdexcept>
-#include <cstring>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <vector>
-#include <map>
-#include <sstream>
 
-#define MAX_CLIENTS 100
 
 // Constructor
 Server::Server(int port, const std::string& password)
     : _port(port), _password(password), _running(false)
 {
+    initSignals();
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_server_fd == -1) {
         throw std::runtime_error("Failed to create socket");
@@ -43,11 +31,16 @@ Server::Server(int port, const std::string& password)
     }
     _fds[0].fd = _server_fd;
     _fds[0].events = POLLIN;
+    _clients.push_back(Client(_server_fd));
+
 }
+
+Server* Server::serverInstance = nullptr;
 
 // Destructor
 Server::~Server()
 {
+    std::cout << "Closing Server...\n";
     close(_server_fd);
 }
 
@@ -61,7 +54,6 @@ void Server::run()
         int poll_count = poll(_fds, MAX_CLIENTS, -1);
 
         if (poll_count == -1) {
-            std::cerr << "Poll failed" << std::endl;
             continue;
         }
 
@@ -113,11 +105,11 @@ void Server::acceptNewConnection() {
     }
 }
 
-
 // Method to handle data received from a client
 void Server::handleClientData(int client_index)
 {
-    char buffer[1024];
+    // char buffer[1024];
+    bzero(buffer,sizeof(buffer));
     int valread = read(_fds[client_index].fd, buffer, sizeof(buffer) - 1);
 
     if (valread <= 0) {
@@ -128,7 +120,6 @@ void Server::handleClientData(int client_index)
         }
 
         close(_fds[client_index].fd);
-        _fds[client_index].fd = -1;
 
         // Supprimer le client de la liste des clients
         for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
@@ -137,21 +128,29 @@ void Server::handleClientData(int client_index)
                 break;
             }
         }
+        _fds[client_index].fd = -1;
     } else {
         buffer[valread] = '\0';
         std::cout << "Received from client " << _fds[client_index].fd << ": " << buffer;
 
         // Traiter les commandes IRC
-        if (strncmp(buffer, "NICK ", 5) == 0) {
-            handleNickCommand(client_index, buffer);
-        }else if (strncmp(buffer, "INVITE ", 7) == 0) {
+        if (strstr(buffer, "NICK ") != nullptr) {
+                handleNickCommand(client_index, buffer);
+        } if (strstr(buffer, "USER ") != nullptr) {
+                handleUserCommand(client_index, buffer);
+        } else if (strncmp(buffer, "INVITE ", 7) == 0) {
             handleInviteCommand(buffer, client_index);
+        } else if (strncmp(buffer, "PASS ", 5) == 0) {
+            handlePassCommand(buffer, client_index);
         }else if (strncmp(buffer, "TOPIC ", 6) == 0) {
             handleTopicCommand(buffer, client_index);
-        }else if (strncmp(buffer, "USER ", 5) == 0) {
-            handleUserCommand(client_index, buffer);
-        }else if (strncmp(buffer, "CAP LS ", 6) == 0) {
+        }else if (strncmp(buffer, "CAP END ", 8) == 0) {
+            std::string response = ":server CAP * END\r\n";
+            send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+        }else if (strncmp(buffer, "CAP LS ", 7) == 0) {
             std::string response = ":server CAP * LS :multi-prefix\r\n";
+        }else if (strncmp(buffer, "CAP REQ ", 8) == 0) {
+            std::string response = ":server CAP * ACK :multi-prefix\r\n";
             send(_fds[client_index].fd, response.c_str(), response.length(), 0);
         }else if (strncmp(buffer, "PRIVMSG ", 8) == 0) {
             handlePrivMsgCommand(client_index, buffer,_clients[client_index]);
@@ -160,215 +159,132 @@ void Server::handleClientData(int client_index)
         }else if (strncmp(buffer, "MODE ", 5) == 0) {
             // Implémenter la gestion du mode du channel
         }else if (strncmp(buffer, "PING ", 5) == 0) {
-            // Répondre au message PING du client
             std::string pongResponse = "PONG " + std::string(buffer + 5) + "\r\n";
             send(_fds[client_index].fd, pongResponse.c_str(), pongResponse.length(), 0);
         }else if (strncmp(buffer, "PART ", 5) == 0) {
-            handlePartCommand(buffer, client_index);
-        }
-        // else {
-        //     // Par défaut, diffuser le message à tous les clients sauf l'expéditeur
-        //     for (int i = 1; i < MAX_CLIENTS; ++i) {
-        //         if (_fds[i].fd > 0 && i != client_index) {
-        //             send(_fds[i].fd, buffer, valread, 0);
-        //         }
-        //     }
-        // }
-    }
-}
-
-void Server::handleInviteCommand(int client_index, const char* buffer) {
-    std::string command(buffer);
-    std::istringstream iss(command.substr(8)); // Ignore "/invite "
-
-    std::string nick;
-    iss >> nick;
-
-    std::string channelName;
-    iss >> channelName;
-
-    if (!nick.empty() && !channelName.empty()) {
-        // Trouver le client destinataire
-        bool found = false;
-        for (size_t i = 0; i < _clients.size(); ++i) {
-            if (_clients[i].getNick() == nick) {
-                // Trouver ou créer le canal
-                Channel* channel = findChannel(channelName);
-                if (!channel) {
-                    createChannel(channelName);
-                    channel = findChannel(channelName);
-                }
-                if (channel) {
-                    // Inviter le client au canal
-                    joinChannel(channelName, _clients[i]);
-
-                    // Envoyer un message de confirmation à l'inviteur
-                    std::string response = ":server 341 " + _clients[client_index].getNick() + " " + _clients[i].getNick() + " :" + channelName + " Invitation sent\r\n";
-                    ::send(_fds[client_index].fd, response.c_str(), response.length(), 0);
-
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) {
-            // Client non trouvé
-            std::cerr << "Client not found: " << nick << std::endl;
+            handlePartCommand(buffer, client_index);        
+        }else {
+            std::cout << "Unhandle message: " << buffer;
         }
     }
 }
 
-void Server::handleJoinCommand(const char* buffer, int client_index) {
-    std::string command(buffer);
-    std::istringstream iss(command.substr(5)); // Ignorer le préfixe /JOIN
+void Server::sendErrorMessage(int client_index, const std::string& message) {
+    // Prepare the error message to send
+    std::string errorResponse = ":server ERROR : " + message + "\r\n";
 
-    std::string channelName;
-    iss >> channelName;
+    // Send the error message back to the client
+    int len = errorResponse.length();
+    int bytes_sent = send(_fds[client_index].fd, errorResponse.c_str(), len, 0);
 
-    if (!channelName.empty()) {
-        if (!findChannel(channelName)) {
-            createChannel(channelName);
-        }
-        joinChannel(channelName, _clients[client_index]);
-    }
-}
-
-void Server::handlePrivMsgCommand(int client_index, const char* buffer ,const Client& client) {
-    std::string command(buffer);
-    
-    // Find PRIVMSG command and extract target and message
-    size_t pos = command.find("PRIVMSG ");
-    if (pos == std::string::npos) {
-        std::cerr << "Invalid PRIVMSG command format" << std::endl;
-        return;
-    }
-    
-    // Move the position past "PRIVMSG "
-    pos += 8;
-    
-    // Find end of target (channel name)
-    size_t end_pos = command.find_first_of(" :", pos);
-    if (end_pos == std::string::npos) {
-        std::cerr << "Invalid PRIVMSG command format" << std::endl;
-        return;
-    }
-    
-    std::string channelName = command.substr(pos, end_pos - pos);
-    
-    // Find the message content
-    std::string message;
-    pos = command.find(" :", end_pos);
-    if (pos != std::string::npos) {
-        message = command.substr(pos + 2); // Skip " :"
+    if (bytes_sent != len) {
+        std::cerr << "Error sending error message to client " << _fds[client_index].fd << std::endl;
+        // Handle send error if necessary
     } else {
-        std::cerr << "Invalid PRIVMSG command format" << std::endl;
-        return;
+        std::cout << "Sent error message to client " << _fds[client_index].fd << ": " << message << std::endl;
     }
-    
-    std::cout << "Received PRIVMSG command from client " << _fds[client_index].fd << " to channel: " << channelName << ", message: " << message << std::endl;
-    
-    // Check if channelName is valid (e.g., starts with # for IRC channels)
-    if (channelName.empty() || channelName[0] != '#') {
-        std::cerr << "Invalid channel name in PRIVMSG command" << std::endl;
-        return;
-    }
-    
-    // Example: Send the message to all clients in the channel
-    sendChannelMessage(channelName, message, _fds[client_index].fd,client);
 }
+
+/*PASS*/
+void Server::handlePassCommand(const char* buffer, int client_index)
+{
+    std::cout << "Handling " << buffer;
+
+    // Find the start of the password after "PASS "
+    const char* pass_start = strstr(buffer, "PASS ") + 5;
     
-  
-void Server::sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client) {
-    // Find the channel in _channels map
-    Channel* channel = findChannel(channelName);
-    if (!channel) {
-        std::cerr << "Channel not found: " << channelName << std::endl;
-        return;
+    // Extract password until the next space or end of string
+    std::string password;
+    while (*pass_start && !isspace(*pass_start)) {
+        password += *pass_start++;
     }
 
-    // Get the list of clients in the channel
-    const std::vector<int> clientSockets = channel->getSockets();
-const std::vector<Client> clients = channel->getClients();
+    // Remove '\r' and '\n' characters from the password
+    password.erase(std::remove(password.begin(), password.end(), '\r'), password.end());
+    password.erase(std::remove(password.begin(), password.end(), '\n'), password.end());
 
-// Send the message to all clients in the channel
-std::vector<int>::const_iterator socketIt;
-std::vector<Client>::const_iterator clientIt;
+    // Compare the provided password with the stored password
+    if (password == _password) {
+        std::cout << "Password accepted for client " << _fds[client_index].fd << std::endl;
 
-for (socketIt = clientSockets.begin(); socketIt != clientSockets.end(); ++socketIt) {
-    int clientSocket = *socketIt;
+        // Password accepted, proceed with appropriate actions
+        // For example, set a flag indicating authentication or proceed with further operations.
+        _clients[client_index].authenticate();
 
-    // Exclude the sender from receiving their own message
-    if (clientSocket != senderSocket) {
-        // Find the index of the client in the clients vector
-        int clientIndex = clientSocket - 4; // Assuming 4 is the offset for the client socket in your example
-
-        // Check bounds to avoid out-of-range access
-        if (clientIndex >= 0 && clientIndex < clients.size()) {
-            std::string messageToSend = ":" + client.getNick() + " PRIVMSG " + channelName + " :" + message + "\r\n";
-            send(clientSocket, messageToSend.c_str(), messageToSend.length(), 0);
+        // Example: If both password and username (if applicable) are verified, send welcome message
+        if (_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+            sendWelcomeMessage(client_index);
         }
+    } else {
+        std::cout << "Password rejected for client " << _fds[client_index].fd << std::endl;
+
+        // Password rejected, handle accordingly (e.g., disconnect client, send error message)
+        sendErrorMessage(client_index, "Incorrect password");
+        handleClientDisconnect( _clients[client_index]);
     }
 }
-}
+
+/*NICK*/
 void Server::handleNickCommand(int client_index, const char* buffer)
 {
-    std::string nick(buffer + 5);
+    std::cout << "Handling " + std::string(buffer);
+    // Find the start of the nickname after "NICK "
+    const char* nick_start = strstr(buffer, "NICK ") + 5;
+    
+    // Extract nickname until the next space or end of string
+    std::string nick;
+    while (*nick_start && !isspace(*nick_start)) {
+        nick += *nick_start++;
+    }
+
+    // Remove '\r' and '\n' characters from the nickname
     nick.erase(std::remove(nick.begin(), nick.end(), '\r'), nick.end());
     nick.erase(std::remove(nick.begin(), nick.end(), '\n'), nick.end());
-    
-    _clients[client_index].setNick(nick);
 
+    _clients[client_index].setNick(nick);
+    std::cout << "Handled client " << _fds[client_index].fd << "=> Nick: " << _clients[client_index].getNick() << std::endl;
     // Check if both NICK and USER commands have been received
-    if (!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+    if (_clients[client_index].isAuthenticated() &&!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
         sendWelcomeMessage(client_index);
     }
 }
 
+/*USER*/
 void Server::handleUserCommand(int client_index, const char* buffer)
 {
-    std::string user(buffer + 5);
-    std::istringstream iss(user);
+    // Find the start of the username after "USER "
+    std::cout << "Handling " + std::string(buffer);
+    const char* username_start = strstr(buffer, "USER ") + 5;
+    
+    // Extract username until the next space or end of string
     std::string username;
-    iss >> username;
+    while (*username_start && !isspace(*username_start)) {
+        username += *username_start++;
+    }
 
     _clients[client_index].setUsername(username);
 
+    std::cout << "Handled client " << _fds[client_index].fd << "=> User: " << _clients[client_index].getUsername() << std::endl;
     // Check if both NICK and USER commands have been received
-    if (!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+    if (_clients[client_index].isAuthenticated() &&!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
         sendWelcomeMessage(client_index);
     }
 }
 
-void Server::sendWelcomeMessage(int client_index)
-{
-    std::string welcome = ":server 001 " + _clients[client_index].getNick() + " :Welcome to the IRC server\r\n";
-    send(_fds[client_index].fd, welcome.c_str(), welcome.length(), 0);
-}
-
-void Server::handleNewConnection(int socket)
-{
-    Client newClient(socket);
-    _clients.push_back(newClient);
-    std::cout << "New client connected: " << socket << std::endl;
-}
-
-void Server::handleClientData(Client& client, const std::string& data)
-{
-    std::cout << "Data received from client " << client.getSocket() << ": " << data << std::endl;
-    // Handle the data received from the client
-}
-
+/*DISCONNECT*/
 void Server::handleClientDisconnect(Client& client)
 {
     std::cout << "Client disconnected: " << client.getSocket() << std::endl;
     for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
         if (*it == client) {
             _clients.erase(it);
+            close(_fds[it->getSocket()].fd);
             break;
         }
     }
 }
 
+/*Create Channel*/
 void Server::createChannel(const std::string& name) {
     std::cout << "Creating Channel: " << name << std::endl;
     Channel newChannel(name);
@@ -386,7 +302,7 @@ void Server::createChannel(const std::string& name) {
     }
 }
 
-
+/*Join Channel*/
 void Server::joinChannel(const std::string& channelName, const Client& client)
 {
     std::cout << "Trying to join channel: " << channelName << std::endl;
@@ -431,9 +347,7 @@ void Server::joinChannel(const std::string& channelName, const Client& client)
     }
 }
 
-
-
-
+/*Leave Channnel*/
 void Server::leaveChannel(const std::string& channelName, const Client& client)
 {
     Channel* channel = findChannel(channelName);
@@ -464,7 +378,7 @@ void Server::leaveChannel(const std::string& channelName, const Client& client)
     }
 }
 
-
+/*Find Channel*/
 Channel* Server::findChannel(const std::string& channelName)
 {
     for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
@@ -476,90 +390,21 @@ Channel* Server::findChannel(const std::string& channelName)
     return NULL;
 }
 
-void Server::handlePartCommand(const char* buffer, int client_index) {
-    std::string command(buffer);
-    std::istringstream iss(command.substr(5));
-
-    std::string channelName;
-    iss >> channelName;
-
-    if (!channelName.empty()) {
-        Channel* channel = findChannel(channelName);
-        if (channel) {
-            try {
-                leaveChannel(channelName, _clients[client_index]);
-                // Envoyer la réponse à WeeChat indiquant le succès
-                std::string response = ":server PART " + _clients[client_index].getNick() + " :" + channelName + " Leaving channel\r\n";
-                send(_fds[client_index].fd, response.c_str(), response.length(), 0);
-            } catch (const std::exception& e) {
-                std::cerr << "Failed to leave channel " << channelName << ": " << e.what() << std::endl;
-            }
-        } else {
-            std::cerr << "Channel not found: " << channelName << std::endl;
-        }
-    }
+void Server::stopRunning()
+{
+    this->_running = false;
 }
 
-void Server::handleTopicCommand(const char* buffer, int client_index) {
-    std::string command(buffer);
-    std::istringstream iss(command.substr(6));
-
-    std::string channelName;
-    iss >> channelName;
-
-    Channel* channel = findChannel(channelName);
-    if (channel) {
-        size_t pos = command.find(" :");
-        if (pos != std::string::npos) {
-            std::string topic = command.substr(pos + 2);
-            channel->setTopic(topic);
-
-            // Diffuser le nouveau sujet à tous les membres du canal
-            std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
-            channel->broadcastMessage(topicMessage, _clients[client_index]);
-        } else {
-            // Envoyer le sujet actuel au client demandeur
-            std::string topicMessage = ":server 332 " + _clients[client_index].getNick() + " " + channelName + " :" + channel->getTopic() + "\r\n";
-            send(_fds[client_index].fd, topicMessage.c_str(), topicMessage.length(), 0);
-        }
-    } else {
-        std::cerr << "Channel not found: " << channelName << std::endl;
-    }
+void Server::initSignals() {
+        serverInstance = this;  // Set the global pointer to this instance
+        signal(SIGINT, handleSignal);
+        signal(SIGTERM, handleSignal);
+        signal(SIGQUIT, handleSignal);
 }
 
-void Server::handleInviteCommand(const char* buffer, int client_index) {
-    std::string command(buffer);
-    std::istringstream iss(command.substr(7)); // Ignorer le préfixe INVITE
-
-    std::string nick;
-    std::string channelName;
-    iss >> nick; // Récupérer le nick à inviter
-    iss >> channelName; // Récupérer le nom du canal
-
-    if (!nick.empty() && !channelName.empty()) {
-        // Trouver le client invité dans la liste des clients
-        Client* invitedClient = nullptr;
-        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-            if (it->getNick() == nick) {
-                invitedClient = &(*it);
-                break;
-            }
+void Server::handleSignal(int signal) {
+        if (serverInstance) {
+            std::cout << "Received signal: " << signal << ". Terminating server..." << std::endl;
+            serverInstance->stopRunning();  // Access stopRunning through serverInstance
         }
-
-        if (invitedClient) {
-            // Envoyer le message d'invitation au client qui a envoyé la commande
-            std::string inviteMessage = ":server INVITE " + nick + " " + channelName + "\r\n";
-            send(_fds[client_index].fd, inviteMessage.c_str(), inviteMessage.length(), 0);
-
-            // Envoyer le message d'invitation au client invité
-            std::string notifyMessage = ":" + _clients[client_index].getNick() + " INVITE " + nick + " :" + channelName + "\r\n";
-            send(invitedClient->getSocket(), notifyMessage.c_str(), notifyMessage.length(), 0);
-        } else {
-            // Gestion de l'erreur : le client invité n'est pas trouvé
-            std::cerr << "Error: Client to invite not found" << std::endl;
-        }
-    } else {
-        // Gestion de l'erreur : la commande INVITE est malformée
-        std::cerr << "Error: Malformed INVITE command" << std::endl;
-    }
 }
