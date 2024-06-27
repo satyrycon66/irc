@@ -53,15 +53,18 @@ private:
     void handleClientData(int client_index);
     void handleInviteCommand(int client_index, const char* buffer);
     void handleJoinCommand(const char* buffer, int client_index) ;
+    void handleKickCommand(const char* buffer, int client_index) ;
     void handlePartCommand(const char* buffer, int client_index) ;
     void handleTopicCommand(const char* buffer, int client_index) ;
     void handleInviteCommand(const char* buffer, int client_index) ;
     void handlePassCommand(const char *buffer, int client_index);
     void handleNickCommand(int client_index, const char* buffer);
     void handlePrivMsgCommand(int client_index, const char* buffer ,const Client& client);
+    void handleModeCommand(const char* buffer, int client_index);
     void handleUserCommand(int client_index, const char* buffer);
     void handleClientDisconnect(Client& client);
     Channel* findChannel(const std::string& channelName);
 };
-
+std::string toLower(const std::string& str);
+std::string removeCRLF(const std::string& str);
 #endif // SERVER_HPP

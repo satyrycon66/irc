@@ -19,4 +19,4 @@ fclean:
 re: fclean all
 
 run: re
-	./a.out 6667 asd
+	./a.out 6667 asd 

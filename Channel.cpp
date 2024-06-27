@@ -32,6 +32,38 @@ void Channel::removeClient(const Client& client) {
     }
 }
 
+
+void Channel::setMode(const std::string& mode) {
+    _channelModes = mode;
+}
+
+bool Channel::hasMode(char mode) const {
+    return _channelModes.find(mode) != std::string::npos;
+}
+
+void Channel::removeMode(char mode) {
+    size_t pos = _channelModes.find(mode);
+    if (pos != std::string::npos) {
+        _channelModes.erase(pos, 1);
+    }
+}
+
+Client* Channel::getOneClient(const std::string& nick) {
+        std::string temp = removeCRLF(nick);
+        std::string lowerNick = toLower(temp);
+        
+
+        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+            if (toLower(it->getNick()) == lowerNick) {
+                std::cout << "Client found: " << removeCRLF(nick) << std::endl;
+                return &(*it);  // Return a pointer to the found client
+            }
+        }
+
+        std::cerr << "Client not found: " << removeCRLF(nick)  << "." <<std::endl;
+        return NULL;  // Return NULL if client with given nick is not found
+    }
+
 bool Channel::hasClient(const Client& client) const {
     for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it) {
         if (*it == client)

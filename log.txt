@@ -1,0 +1,24 @@
+Server started on port 6667
+New client connected: 4
+Received from client 4: PASS asd
+Handling PASS asd
+Password accepted for client 4
+Received from client 4: CAP LS 302
+Received from client 4: NICK batman
+Handling NICK batman
+Handled client 4=> Nick: batman
+Unhandle message: NICK batman
+Received from client 4: USER bruce 0 * :bruce
+Handling USER bruce 0 * :bruce
+Handled client 4=> User: bruce
+Received from client 4: JOIN #allo
+Creating Channel: #allo
+Channel created: #allo
+Trying to join channel: #allo
+Channel found: #allo
+Client 4 joined channel #allo
+Sending JOIN message to client: 4
+Received from client 4: MODE #allo
+Received from client 4: PING 10.18.200.40
+Received signal: 2. Terminating server...
+Closing Server...

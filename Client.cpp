@@ -1,4 +1,6 @@
 #include "Client.hpp"
+#include "Channel.hpp"
+#include "Server.hpp"
 
 Client::Client(int socket): _socket(socket), _authenticated(false){ return;}
 // Client::Client(const std::string& username) : _username(username), _authenticated(false) {return }
@@ -13,6 +15,21 @@ void Client::setUsername(const std::string& username){    _username = username;}
 void Client::setNick(const std::string& nick){    _nick = nick;}
 void Client::authenticate(){    _authenticated = true;}
 
+void Client::setUserMode(const std::string& nick, const std::string& mode,int fd) {
+    _userModes.insert(std::pair<std::string, std::string >(nick, mode));
+    std::string response = ":server MODE " + nick + " " + mode + "\r\n";
+    send(fd, response.c_str(), response.length(), 0);
+}
+
+ std::string Client::getUserMode(const std::string& nick) const {
+        std::map<std::string, std::string>::const_iterator it = _userModes.find(nick);
+        if (it != _userModes.end()) {
+            return it->second;
+        }
+        return ""; // Return empty string if user mode not found
+    }
+
+
 // Opérateur de comparaison ==
 bool Client::operator==(const Client& other) const {
     return this->_username == other._username; // Comparaison basée sur le nom d'utilisateur par exemple
@@ -22,6 +39,8 @@ bool Client::operator==(const Client& other) const {
 bool Client::operator!=(const Client& other) const {
     return !(*this == other); // Utilisation de l'opérateur == pour définir !=
 }
+
+
 
 
 // /server add IRC5 localhost/6667 -notls
