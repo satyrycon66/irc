@@ -2,22 +2,27 @@
 #define CLIENT_HPP
 
 #include <string>
-#include <map>
+#include <vector>
 class Client {
 public:
     Client(int socket);
     ~Client();
-    Client(const std::string& username);
+    // Client(const std::string& username);
     int getSocket() const;
     const std::string& getUsername() const;
     const std::string& getNick() const;
     bool isAuthenticated() const;
+    std::vector<std::string> getAllModes() const;
     void setNick(const std::string& nick);
     void setUsername(const std::string& username);
     void authenticate();
     bool isInChannel(const std::string& channelName) const;
+    void setMode(const std::string& modes);
+    bool hasMode(char mode) const ;
     void setUserMode(const std::string& nick, const std::string& mode, int fd);
-    std::string getUserMode(const std::string& nick) const;
+
+    // const std::map<std::string, std::string>&  getUserMode() const;
+    std::string getAllModesString() const;
         // New methods for channel modes
     
       // Opérateur de comparaison ==
@@ -30,8 +35,10 @@ private:
     int _socket;
     std::string _username;
     std::string _nick;
+    std::string _index;
     bool _authenticated;
-    std::map<std::string, std::string> _userModes; // nick / modes
+    std::string _userModes; // nick / modes
+
 };
 std::string toLower(const std::string& str);
 std::string removeCRLF(const std::string& str);

@@ -22,6 +22,7 @@ public:
     void setName(const std::string& name);
     Client *getOneClient(const std::string& nick) ;
     void setMode(const std::string& mode);
+    std::string  getMode();
     bool hasMode(char mode) const;
     void removeMode(char mode);
     

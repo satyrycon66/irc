@@ -14,22 +14,49 @@ bool Client::isAuthenticated() const{ return _authenticated;}
 void Client::setUsername(const std::string& username){    _username = username;}
 void Client::setNick(const std::string& nick){    _nick = nick;}
 void Client::authenticate(){    _authenticated = true;}
-
-void Client::setUserMode(const std::string& nick, const std::string& mode,int fd) {
-    _userModes.insert(std::pair<std::string, std::string >(nick, mode));
-    std::string response = ":server MODE " + nick + " " + mode + "\r\n";
-    send(fd, response.c_str(), response.length(), 0);
-}
-
- std::string Client::getUserMode(const std::string& nick) const {
-        std::map<std::string, std::string>::const_iterator it = _userModes.find(nick);
-        if (it != _userModes.end()) {
-            return it->second;
+  bool Client::hasMode(char mode) const {
+        std::string modeString(1, mode);
+        return _userModes.find(modeString) != std::string::npos;
+    }
+        void Client::setMode(const std::string& modes) {
+        if (modes.empty() || modes.size() < 2) {
+            std::cerr << "Invalid mode string: " << modes << std::endl;
+            return; // Handle invalid or empty mode string
         }
-        return ""; // Return empty string if user mode not found
+        std::string nick = getNick();
+        char operation = modes[0];
+        char modeChar = modes[1];
+
+        if (operation == '+') {
+            // Add mode character if it doesn't already exist
+            if (_userModes.find(modeChar) == std::string::npos) {
+                _userModes += modeChar;
+                std::cout << "Mode '" << modeChar << "' added for client " << nick << std::endl;
+            } else {
+                std::cout << "Client " << nick << " already has mode '" << modeChar << "'" << std::endl;
+            }
+        } else if (operation == '-') {
+            // Remove mode character if it exists
+            size_t pos = _userModes.find(modeChar);
+            if (pos != std::string::npos) {
+                _userModes.erase(pos, 1);
+                std::cout << "Mode '" << modeChar << "' removed for client " << nick << std::endl;
+            } else {
+                std::cout << "Client " << nick << " does not have mode '" << modeChar << "'" << std::endl;
+            }
+        } else {
+            std::cerr << "Invalid mode operation: " << operation << std::endl;
+        }
     }
 
+/*for permission verification*/
+    std::string Client::getAllModesString() const {
+        return _userModes;
+    }
 
+    // std::vector<std::string> Client::getAllModes() const {
+    //     return _userModes;
+    // }
 // Opérateur de comparaison ==
 bool Client::operator==(const Client& other) const {
     return this->_username == other._username; // Comparaison basée sur le nom d'utilisateur par exemple

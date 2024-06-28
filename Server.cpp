@@ -109,6 +109,8 @@ void Server::acceptNewConnection() {
 void Server::handleClientData(int client_index)
 {
     // char buffer[1024];
+    if(!std::string(buffer).empty())
+        std::cout<< "+Buffer before read: " << buffer;
     bzero(buffer,sizeof(buffer));
     int valread = read(_fds[client_index].fd, buffer, sizeof(buffer) - 1);
 
@@ -158,7 +160,6 @@ void Server::handleClientData(int client_index)
             handleJoinCommand(buffer, client_index);
         }else if (strncmp(buffer, "MODE ", 5) == 0) {
             handleModeCommand(buffer, client_index);
-            // Implémenter la gestion du mode du channel
         }else if (strncmp(buffer, "PING ", 5) == 0) {
             std::string pongResponse = "PONG " + std::string(buffer + 5) + "\r\n";
             send(_fds[client_index].fd, pongResponse.c_str(), pongResponse.length(), 0);
@@ -171,7 +172,6 @@ void Server::handleClientData(int client_index)
         }
     }
 }
-
 
 /*MODE*/
 void Server::handleModeCommand(const char* buffer, int client_index)
@@ -187,29 +187,40 @@ void Server::handleModeCommand(const char* buffer, int client_index)
     std::string channel = removeCRLF(mode_params.substr(0, second_space_pos)); // Extract the channel name
     std::string modes = removeCRLF(mode_params.substr(second_space_pos + 1)); // Extract the mode changes
     std::string clientNick = _clients[client_index].getNick();
+    if (modes[0] != '+' && modes[0] != '-') 
+        modes.clear();
+    else if (command.find('#') != std::string::npos && !modes.empty())
+    {
 
-   if (command.find('#') != std::string::npos)
-    {
-    Channel* chan = findChannel(channel);
-    if (!modes.empty()&& channel != modes)
-    {
-        std::cout << "." << channel <<".\n";
-        std::cout << "." << modes <<".\n";
-    if (chan) {
+        Channel* chan = findChannel(channel);
+        if (chan) {
         // Implement logic to parse and apply mode changes
-        std::string response = ":" + clientNick + " MODE " + channel + " " + modes + "\r\n";
-        send(_fds[client_index].fd, response.c_str(), response.length(), 0);
-    } else {
-        std::cerr << "Channel Not found: " << channel << std::endl;
-        send(_clients[client_index].getSocket(), "403 ERR_NOSUCHCHANNEL", 22, 0);
-    }
-    }
-    }
-    else if (channel != modes){ ///// patch //////
-    _clients[client_index].setUserMode(clientNick, modes,_fds[client_index].fd);
-   
-    }
+            chan->setMode(modes);
+            std::string response = ":server MODE " + channel + " " + modes + "\r\n";
+            send(_clients[client_index].getSocket(), response.c_str(), response.length(), 0);
+            sendChannelMessage(channel,response,_clients[client_index].getSocket(),_clients[client_index]);
+        } else {
+            std::cerr << "Channel Not found: " << channel << std::endl;
+            send(_clients[client_index].getSocket(), "403 ERR_NOSUCHCHANNEL", 22, 0);
+        }
+    } else if (!modes.empty()){
+        std::cout << "+:" << modes << ":+\n";
+       Client *updateClient ;
+       std::vector<Channel>::iterator it = _channels.begin();
+       while (it != _channels.end())
+       {
+        if (it->hasClient(_clients[client_index]))
+            updateClient = (it->getOneClient(_clients[client_index].getNick()));
+            updateClient->setMode(modes);
 
+        it++;
+       }
+        updateClient->setMode(modes);
+    std::string response = ":server MODE " + clientNick + " " + modes + "\r\n";
+    
+    sendChannelMessage(channel,response,_clients[client_index].getSocket(),_clients[client_index]);
+    // send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+    }
 }
 
 /*KICK*/
@@ -241,33 +252,46 @@ void Server::handleKickCommand(const char* buffer, int client_index)
         return;
     }
     
+    Client *kicker = chan->getOneClient(_clients[client_index].getNick());
     Client *kickTarget = chan->getOneClient(target);
     if (!kickTarget) {
         send(_clients[client_index].getSocket(), "403 ERR_NOSUCHNICK", 19, 0);
         return;
     }
 
-    std::string kickMessage = ":" + _clients[client_index].getNick() + "!~" + kickTarget->getUsername() + "@localhost KICK " + channel + " " + target + "\r\n";
+    // Vérifier les droits de l'utilisateur qui envoie la commande
+    std::string userNick = _clients[client_index].getNick();
+    std::string userMode = kicker->getAllModesString();
 
-    // Send KICK message to all clients in the channel except the one being kicked
-    std::vector<Client> clients = chan->getClients();
-    std::vector<Client>::const_iterator it;
-    for (it = clients.begin(); it != clients.end(); ++it) {
-        const Client& chanClient = *it;
-        if (chanClient.getSocket() != kickTarget->getSocket()) {
-            send(chanClient.getSocket(), kickMessage.c_str(), kickMessage.length(), 0);
+    // Suppose que 'o' (opérateur) est le mode nécessaire pour kicker
+    if (userMode.find('o') != std::string::npos) {
+        std::string kickMessage = ":" + _clients[client_index].getNick() + "!~" + kickTarget->getUsername() + "@localhost KICK " + channel + " " + target + "\r\n";
+
+        // Send KICK message to all clients in the channel except the one being kicked
+        std::vector<Client> clients = chan->getClients();
+        std::vector<Client>::const_iterator it;
+        for (it = clients.begin(); it != clients.end(); ++it) {
+            const Client& chanClient = *it;
+            if (chanClient.getSocket() != kickTarget->getSocket()) {
+                send(chanClient.getSocket(), kickMessage.c_str(), kickMessage.length(), 0);
+            }
         }
+
+        // Send KICK message to the client being kicked
+        send(kickTarget->getSocket(), kickMessage.c_str(), kickMessage.length(), 0);
+
+        // Remove the client from the channel
+        chan->removeClient(*kickTarget);
+
+        // Server console output
+        std::cout << "Client " << kickTarget->getSocket() << " was kicked from channel " << channel << " by client: " << std::to_string(_clients[client_index].getSocket()) << std::endl;
+    } else {
+        // Gestion de l'erreur : l'utilisateur n'a pas les droits nécessaires
+        std::string errorMessage = ":server 482 " + userNick + " " + channel + " :You're not channel operator\r\n";
+        send(_clients[client_index].getSocket(), errorMessage.c_str(), errorMessage.length(), 0);
     }
-
-    // Send KICK message to the client being kicked
-    send(kickTarget->getSocket(), kickMessage.c_str(), kickMessage.length(), 0);
-
-    // Remove the client from the channel
-    chan->removeClient(*kickTarget);
-
-    // Server console output
-    std::cout << "Client " << kickTarget->getSocket() << " was kicked from channel " << channel << " by client: " << std::to_string(_clients[client_index].getSocket()) << std::endl;
 }
+
 
 void Server::sendErrorMessage(int client_index, const std::string& message) {
     // Prepare the error message to send
@@ -389,6 +413,7 @@ void Server::createChannel(const std::string& name) {
     std::cout << "Creating Channel: " << name << std::endl;
     Channel newChannel(name);
     _channels.push_back(newChannel);
+    newChannel.setName(name);
 
     std::cout << "Channel created: " << name << std::endl;
 
@@ -403,48 +428,66 @@ void Server::createChannel(const std::string& name) {
 }
 
 /*Join Channel*/
-void Server::joinChannel(const std::string& channelName, const Client& client)
+void Server::joinChannel(const std::string& channelName, const Client& client, int client_index)
 {
     std::cout << "Trying to join channel: " << channelName << std::endl;
     Channel* channel = findChannel(channelName);
+    
+
     if (channel) {
-        std::cout << "Channel found: " << channelName << std::endl;
-        try {
-            channel->addClient(client);
+        if (!channel->hasClient(client) && channel->hasMode('i')) {
+            sendErrorMessage(client_index, "Channel is invite-only");
+            // handleClientDisconnect(_clients[client_index]);
+            return ;
+            }
+            std::cout << "Channel found: " << channelName << std::endl;
+            if (!channel->hasClient(client))
+                channel->addClient(client);
             std::cout << "Client " << client.getSocket() << " joined channel " << channelName << std::endl;
 
             // Construire le message JOIN
             std::string joinMessage = ":" + client.getNick() + "!" + client.getUsername() + "@localhost JOIN " + channelName + "\r\n";
 
             // Envoyer le message JOIN à tous les clients du canal
-            const std::vector<Client> channelClients = channel->getClients();
+            std::vector<Client> channelClients = channel->getClients();
             for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
                 std::cout << "Sending JOIN message to client: " << it->getSocket() << std::endl; // Message de débogage
                 send(it->getSocket(), joinMessage.c_str(), joinMessage.length(), 0);
             }
 
             // Envoyer le message MODE au client qui a rejoint
-            std::string modeMessage = ":server MODE " + channelName + " +nt\r\n";
-            send(client.getSocket(), modeMessage.c_str(), modeMessage.length(), 0);
-
-            // Construire et envoyer le message NAMES au client qui a rejoint
-            std::string namesMessage = ":server 353 " + client.getNick() + " = " + channelName + " :";
-            for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
-                namesMessage += it->getNick() + " ";
+            if(!channel->getMode().empty()){
+               std::string modeMessage = ":server MODE " + channelName + " " + channel->getMode() + "\r\n";
+                send(client.getSocket(), modeMessage.c_str(), modeMessage.length(), 0); 
             }
-            namesMessage += "\r\n";
+            
+
+        // Constructing the NAMES message
+    std::string namesMessage = ":server 353 " + client.getNick() + " = " + channelName + " :";
+
+    // Append nicknames of users in the channel with modes
+    for (std::vector<Client>::iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
+        if (it->hasMode('o')) {
+            namesMessage += "@";
+        } else if (it->hasMode('v')) {
+            namesMessage += "+";
+        } else {
+            namesMessage += " ";
+        }
+        namesMessage += it->getNick() + " ";
+    }
+
+    namesMessage += "\r\n"; // Add IRC protocol end of message indicator
             send(client.getSocket(), namesMessage.c_str(), namesMessage.length(), 0);
 
             // Envoyer le message de fin NAMES au client qui a rejoint
             std::string endNamesMessage = ":server 366 " + client.getNick() + " " + channelName + " :End of /NAMES list.\r\n";
             send(client.getSocket(), endNamesMessage.c_str(), endNamesMessage.length(), 0);
 
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to add client to channel " << channelName << ": " << e.what() << std::endl;
-        }
-    } else {
+        
+        } else {
         std::cerr << "Channel not found: " << channelName << std::endl;
-    }
+        }
 }
 
 /*Leave Channnel*/

@@ -1,87 +1,51 @@
 #include "Server.hpp"
 
 /*INVITE*/
-void Server::handleInviteCommand(int client_index, const char* buffer) {
-    std::cout << "Handling " + std::string(buffer);
-    std::string command(buffer);
-    std::istringstream iss(command.substr(8)); // Ignore "/invite "
-
-    std::string nick;
-    iss >> nick;
-
-    std::string channelName;
-    iss >> channelName;
-
-    if (!nick.empty() && !channelName.empty()) {
-        // Trouver le client destinataire
-        bool found = false;
-        for (size_t i = 0; i < _clients.size(); ++i) {
-            if (_clients[i].getNick() == nick) {
-                // Trouver ou créer le canal
-                Channel* channel = findChannel(channelName);
-                if (!channel) {
-                    createChannel(channelName);
-                    channel = findChannel(channelName);
-                }
-                if (channel) {
-                    // Inviter le client au canal
-                    joinChannel(channelName, _clients[i]);
-
-                    // Envoyer un message de confirmation à l'inviteur
-                    std::string response = ":server 341 " + _clients[client_index].getNick() + " " + _clients[i].getNick() + " :" + channelName + " Invitation sent\r\n";
-                    send(_fds[client_index].fd, response.c_str(), response.length(), 0);
-
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) {
-            // Client non trouvé
-            std::cerr << "Client not found: " << nick << std::endl;
-        }
-    }
-}
-
-/*INVITE*/
 void Server::handleInviteCommand(const char* buffer, int client_index) {
     std::cout << "Handling " + std::string(buffer);
     std::string command(buffer);
     std::istringstream iss(command.substr(7)); // Ignorer le préfixe INVITE
-
     std::string nick;
     std::string channelName;
     iss >> nick; // Récupérer le nick à inviter
     iss >> channelName; // Récupérer le nom du canal
-
+    Channel *channel = findChannel(channelName);
     if (!nick.empty() && !channelName.empty()) {
-        // Trouver le client invité dans la liste des clients
-        Client* invitedClient = nullptr;
-        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-            if (it->getNick() == nick) {
-                invitedClient = &(*it);
-                break;
+        // Vérifier les droits de l'utilisateur qui envoie la commande
+        std::string userNick = _clients[client_index].getNick();
+        std::string userMode = channel->getOneClient(_clients[client_index].getNick())->getAllModesString();
+        // Suppose que 'o' (opérateur) est le mode nécessaire pour inviter
+        if (userMode.find('o') != std::string::npos) {
+            // Trouver le client invité dans la liste des clients
+            Client* invitedClient = nullptr;
+            for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+                if (it->getNick() == nick) {
+                    invitedClient = &(*it);
+                    break;
+                }
             }
-        }
-
-        if (invitedClient) {
-            // Envoyer le message d'invitation au client qui a envoyé la commande
-            std::string inviteMessage = ":server INVITE " + nick + " " + channelName + "\r\n";
-            send(_fds[client_index].fd, inviteMessage.c_str(), inviteMessage.length(), 0);
-
-            // Envoyer le message d'invitation au client invité
-            std::string notifyMessage = ":" + _clients[client_index].getNick() + " INVITE " + nick + " :" + channelName + "\r\n";
-            send(invitedClient->getSocket(), notifyMessage.c_str(), notifyMessage.length(), 0);
+            if (invitedClient) {
+                // Envoyer le message d'invitation au client qui a envoyé la commande
+                channel->addClient(*invitedClient);
+                std::string inviteMessage = ":server INVITE " + nick + " " + channelName + "\r\n";
+                send(_fds[client_index].fd, inviteMessage.c_str(), inviteMessage.length(), 0);
+                // Envoyer le message d'invitation au client invité
+                std::string notifyMessage = ":" + _clients[client_index].getNick() + " INVITE " + nick + " :" + channelName + "\r\n";
+                send(invitedClient->getSocket(), notifyMessage.c_str(), notifyMessage.length(), 0);
+            } else {
+                // Gestion de l'erreur : le client invité n'est pas trouvé
+                std::cerr << "Error: Client to invite not found" << std::endl;
+            }
         } else {
-            // Gestion de l'erreur : le client invité n'est pas trouvé
-            std::cerr << "Error: Client to invite not found" << std::endl;
+            // Gestion de l'erreur : l'utilisateur n'a pas les droits nécessaires
+            std::string errorMessage = ":server 482 " + userNick + " " + channelName + " :You're not channel operator\r\n";
+            send(_fds[client_index].fd, errorMessage.c_str(), errorMessage.length(), 0);
         }
     } else {
         // Gestion de l'erreur : la commande INVITE est malformée
         std::cerr << "Error: Malformed INVITE command" << std::endl;
     }
 }
-
 /*JOIN*/
 void Server::handleJoinCommand(const char* buffer, int client_index) {
     std::string command(buffer);
@@ -93,8 +57,12 @@ void Server::handleJoinCommand(const char* buffer, int client_index) {
     if (!channelName.empty()) {
         if (!findChannel(channelName)) {
             createChannel(channelName);
+            Channel *channel = findChannel(channelName);
+            channel->addClient(_clients[client_index]);
+            channel->getOneClient(_clients[client_index].getNick())->setMode("+o");
+            
         }
-        joinChannel(channelName, _clients[client_index]);
+        joinChannel(channelName, _clients[client_index], client_index);
     }
 }
 
@@ -187,14 +155,25 @@ void Server::handleTopicCommand(const char* buffer, int client_index) {
     if (channel) {
         size_t pos = command.find(" :");
         if (pos != std::string::npos) {
-            std::string topic = command.substr(pos + 2);
-            channel->setTopic(topic);
+            // L'utilisateur souhaite changer le sujet
+            std::string userNick = _clients[client_index].getNick();
+            std::string userMode = channel->getOneClient(_clients[client_index].getNick())->getAllModesString();
 
-            // Diffuser le nouveau sujet à tous les membres du canal
-            std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
-            sendChannelMessage(channelName, topicMessage, _clients[client_index].getSocket(),_clients[client_index]);
+            // Suppose que 'o' (opérateur) est le mode nécessaire pour changer le sujet
+            if (userMode.find('o') != std::string::npos) {
+                std::string topic = command.substr(pos + 2);
+                channel->setTopic(topic);
+
+                // Diffuser le nouveau sujet à tous les membres du canal
+                std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
+                sendChannelMessage(channelName, topicMessage, _clients[client_index].getSocket(), _clients[client_index]);
+            } else {
+                // Gestion de l'erreur : l'utilisateur n'a pas les droits nécessaires
+                std::string errorMessage = ":server 482 " + userNick + " " + channelName + " :You're not channel operator\r\n";
+                send(_fds[client_index].fd, errorMessage.c_str(), errorMessage.length(), 0);
+            }
         } else {
-            // Envoyer le sujet actuel au client demandeur
+            // L'utilisateur souhaite voir le sujet actuel
             std::string topicMessage = ":server 332 " + _clients[client_index].getNick() + " " + channelName + " :" + channel->getTopic() + "\r\n";
             send(_fds[client_index].fd, topicMessage.c_str(), topicMessage.length(), 0);
         }

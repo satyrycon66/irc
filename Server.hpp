@@ -28,7 +28,7 @@ public:
     ~Server();
     void run();
     void createChannel(const std::string& name);
-    void joinChannel(const std::string& channelName, const Client& client);
+    void joinChannel(const std::string& channelName, const Client& client,int client_index);
     void leaveChannel(const std::string& channelName, const Client& client);
     void sendWelcomeMessage(int client_index);
     void sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client);

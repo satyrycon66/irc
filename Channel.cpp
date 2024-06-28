@@ -7,7 +7,9 @@ Channel::~Channel() { return ;}
 
 const std::string& Channel::getName() const {    return _name;}
 const std::string& Channel::getTopic() const {    return _topic;}
+std::string Channel::getMode() { return _channelModes;}
 const std::vector<Client>& Channel::getClients() const {    return this->_clients;}
+
 std::vector<int> Channel::getSockets() const {
         std::vector<int> sockets;
         std::vector<Client>::const_iterator it;
@@ -18,6 +20,29 @@ std::vector<int> Channel::getSockets() const {
 
 void Channel::setTopic(const std::string& topic) {    _topic = topic;}
 void Channel::setName(const std::string& name) {    _name = name;}
+void Channel::setMode(const std::string& mode) {
+        if (mode.empty()) {
+            return; // Handle empty mode string (optional)
+        }
+
+        char operation = mode[0];
+        for (size_t i = 1; i < mode.size(); ++i) {
+        char modeChar = mode[i];
+
+        if (operation == '+') {
+            // Add mode character if it doesn't already exist
+            if (_channelModes.find(modeChar) == std::string::npos) {
+                _channelModes += modeChar;
+            }
+        } else if (operation == '-') {
+            // Remove mode character if it exists
+            size_t pos = _channelModes.find(modeChar);
+            if (pos != std::string::npos) {
+                _channelModes.erase(pos, 1);
+            }
+        }
+    }
+    }
 
 // Méthode pour ajouter un client
 void Channel::addClient(const Client& client) {   _clients.push_back(client);}
@@ -30,11 +55,6 @@ void Channel::removeClient(const Client& client) {
             break;
         }
     }
-}
-
-
-void Channel::setMode(const std::string& mode) {
-    _channelModes = mode;
 }
 
 bool Channel::hasMode(char mode) const {
@@ -71,9 +91,3 @@ bool Channel::hasClient(const Client& client) const {
     }
     return false;
 }
-
-
-
-
-// Autres méthodes de la classe Channel
-
