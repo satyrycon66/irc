@@ -8,34 +8,47 @@
 class Client;
 class Channel {
 public:
-    Channel(const std::string& name);
+    Channel(const std::string& name,const std::string&password );
     ~Channel();
 
     const std::string& getName() const;
+    const std::string& getPassword() const;
+    const std::string& getUserMaxStr() const;
+    int getUserMax() const;
     bool hasClient(const Client& client) const;
     void addClient(const Client& client);
     void removeClient(const Client& client);
+    void removeClientByName(const std::string& nickName);
     const std::vector<Client>& getClients() const ;
     std::vector<int> getSockets() const ;
     const std::string& getTopic() const;
     void setTopic(const std::string& topic);
     void setName(const std::string& name);
+    void setPassword(const std::string& Password);
+    void setUserMaxStr(const std::string& max);
+    void setUserMax(int max);
     Client *getOneClient(const std::string& nick) ;
     void setMode(const std::string& mode);
     std::string  getMode();
     bool hasMode(char mode) const;
     void removeMode(char mode);
+    bool hasClientNick(std::string nick) const ;
+    bool isEmpty() const;
+    bool isFull() const;
+    bool operator==(const Channel& other) const;
+
+    // Opérateur de comparaison !=
+    bool operator!=(const Channel& other) const;
     
 
 private:
     std::string _name;
     std::string _topic;
     std::vector<Client> _clients;
-    // Channel modes
     std::string _channelModes;
-
-    // User modes
-     // nick, mode
+    std::string _password;
+    int _userLimit;
+    // std::string _userLimitStr;
 
     // Private methods
     bool isValidChannelMode(char mode) const;

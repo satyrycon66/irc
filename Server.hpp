@@ -27,12 +27,14 @@ public:
     Server(int port, const std::string& password);
     ~Server();
     void run();
-    void createChannel(const std::string& name);
-    void joinChannel(const std::string& channelName, const Client& client,int client_index);
+    void createChannel(const std::string& name, const std::string& password);
+    void joinChannel(const std::string& channelName,const std::string& password, const Client& client,int client_index);
     void leaveChannel(const std::string& channelName, const Client& client);
     void sendWelcomeMessage(int client_index);
     void sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client);
     void sendErrorMessage(int client_index, const std::string& message);
+    bool clientExists(const std::string& nick);
+    Client *getClient(const std::string& nick);
     void stopRunning();
     void initSignals();
 
@@ -41,6 +43,7 @@ private:
     static Server* serverInstance; 
     int _port;
     char buffer[1024];
+    std::string tempBuffer;
     static void handleSignal(int signal);
     std::string _password;
     int _server_fd;
@@ -63,8 +66,14 @@ private:
     void handleModeCommand(const char* buffer, int client_index);
     void handleUserCommand(int client_index, const char* buffer);
     void handleClientDisconnect(Client& client);
+    void handleModeChannelCommand(std::string channel, std::string modes, std::string thirdParam,int client_index);
     Channel* findChannel(const std::string& channelName);
+    void removeChannel(const Channel& channel);
+    void sendIRCPrivMessage(const std::string& targetNickname, const std::string& senderNickname, const std::string& message);
+    std::string sendIRCMessage(const std::string& targetNickname,const std::string& msgType, const std::string& senderNickname, const std::string& message);
 };
 std::string toLower(const std::string& str);
+std::string toUpper(const std::string& str);
 std::string removeCRLF(const std::string& str);
+bool isValidMode(const std::string& modes);
 #endif // SERVER_HPP

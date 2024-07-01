@@ -18,5 +18,5 @@ fclean:
 	rm -f $(OBJS) $(EXEC)
 re: fclean all
 
-run: re
+run: re clean
 	./a.out 6667 asd 

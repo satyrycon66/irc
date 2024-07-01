@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include "Client.hpp"
+class Channel;
 class Client {
 public:
     Client(int socket);
@@ -16,14 +18,14 @@ public:
     void setNick(const std::string& nick);
     void setUsername(const std::string& username);
     void authenticate();
+    void addInvintedChannel(Channel *channel);
+    bool isInvitedChannel(Channel *channel) const;
     bool isInChannel(const std::string& channelName) const;
     void setMode(const std::string& modes);
     bool hasMode(char mode) const ;
     void setUserMode(const std::string& nick, const std::string& mode, int fd);
-
-    // const std::map<std::string, std::string>&  getUserMode() const;
     std::string getAllModesString() const;
-        // New methods for channel modes
+
     
       // Opérateur de comparaison ==
     bool operator==(const Client& other) const;
@@ -38,6 +40,7 @@ private:
     std::string _index;
     bool _authenticated;
     std::string _userModes; // nick / modes
+    std::vector<Channel> _invitedChannels;
 
 };
 std::string toLower(const std::string& str);

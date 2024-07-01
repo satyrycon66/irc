@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
 // /set irc.server.IRC5.username simon
 // /connect IRC5
 
-// /server add IRC localhost/6667 -notls
+// /server add IRC 10.18.200.40/6667 -notls
 // /set irc.server.IRC.password asd
 // /set irc.server.IRC.nicks al
 // /set irc.server.IRC.username alexis
