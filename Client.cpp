@@ -36,28 +36,32 @@ void Client::setMode(const std::string& modes) {
     std::string nick = getNick();
     char operation = modes[0];
     char modeChar = modes[1];
-
-    if (operation == '+') {
-        // Add mode character if it doesn't already exist
-        if (_userModes.find(modeChar) == std::string::npos) {
-            _userModes += modeChar;
-            std::cout << "Mode '" << modeChar << "' added for client " << nick << std::endl;
-        } else {
-            std::cout << "Client " << nick << " already has mode '" << modeChar << "'" << std::endl;
-        }
-    } else if (operation == '-') {
-        // Remove mode character if it exists
-        size_t pos = _userModes.find(modeChar);
-        if (pos != std::string::npos) {
-            _userModes.erase(pos, 1);
-            std::cout << "Mode '" << modeChar << "' removed for client " << nick << std::endl;
-        } else {
-            std::cout << "Client " << nick << " does not have mode '" << modeChar << "'" << std::endl;
-        }
+    if (modeChar == 'o'){
+        if (operation == '+') {
+            // Add mode character if it doesn't already exist
+            if (_userModes.find(modeChar) == std::string::npos) {
+                _userModes += modeChar;
+                std::cout << "Mode '" << modeChar << "' added for client " << nick << std::endl;
+            } else {
+                std::cout << "Client " << nick << " already has mode '" << modeChar << "'" << std::endl;
+            }
+        } else if (operation == '-') {
+            // Remove mode character if it exists
+            size_t pos = _userModes.find(modeChar);
+            if (pos != std::string::npos) {
+                _userModes.erase(pos, 1);
+                std::cout << "Mode '" << modeChar << "' removed for client " << nick << std::endl;
+            } else {
+                std::cout << "Client " << nick << " does not have mode '" << modeChar << "'" << std::endl;
+            }
+        }else {
+            std::cerr << "Invalid mode operation: " << operation << std::endl;
+        } 
     } else {
         std::cerr << "Invalid mode operation: " << operation << std::endl;
     }
 }
+
 std::string Client::getAllModesString() const {       return _userModes;}
 
 bool Client::operator==(const Client& other) const {

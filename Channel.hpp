@@ -13,7 +13,6 @@ public:
 
     const std::string& getName() const;
     const std::string& getPassword() const;
-    const std::string& getUserMaxStr() const;
     int getUserMax() const;
     bool hasClient(const Client& client) const;
     void addClient(const Client& client);

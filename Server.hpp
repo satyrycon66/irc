@@ -21,6 +21,11 @@
 
 #define MAX_CLIENTS 100
 #include "Channel.hpp"
+// struct CommandHandler {
+//     const char* command;
+//     void (*handler)(const char*, int);};
+
+
 
 class Server {
 public:
@@ -44,33 +49,43 @@ private:
     int _port;
     char buffer[1024];
     std::string tempBuffer;
-    static void handleSignal(int signal);
     std::string _password;
     int _server_fd;
     struct pollfd _fds[MAX_CLIENTS];
     std::vector<Client> _clients;
     std::vector<Channel> _channels;
     struct sockaddr_in *_address;
-        
+    typedef void (Server::*CommandHandler)(const char*, int);
+    struct commandMap {
+        const char* command;
+        CommandHandler handler;
+        };
+    commandMap commandMap[12];
     void acceptNewConnection();
+    static void handleSignal(int signal);
     void handleClientData(int client_index);
-    void handleInviteCommand(int client_index, const char* buffer);
     void handleJoinCommand(const char* buffer, int client_index) ;
     void handleKickCommand(const char* buffer, int client_index) ;
     void handlePartCommand(const char* buffer, int client_index) ;
     void handleTopicCommand(const char* buffer, int client_index) ;
     void handleInviteCommand(const char* buffer, int client_index) ;
     void handlePassCommand(const char *buffer, int client_index);
-    void handleNickCommand(int client_index, const char* buffer);
-    void handlePrivMsgCommand(int client_index, const char* buffer ,const Client& client);
+    void handleNickCommand(const char* buffer, int client_index);
+    void handlePrivMsgCommand( const char* buffer, int client_index);
     void handleModeCommand(const char* buffer, int client_index);
-    void handleUserCommand(int client_index, const char* buffer);
+    void handleCAPCommand(const char* buffer, int client_index);
+    void handlePingCommand(const char* buffer, int client_index);
+    // void handleUserCommand(int client_index, const char* buffer);
+    void handleUserCommand(const char* buffer, int client_index);
     void handleClientDisconnect(Client& client);
     void handleModeChannelCommand(std::string channel, std::string modes, std::string thirdParam,int client_index);
     Channel* findChannel(const std::string& channelName);
     void removeChannel(const Channel& channel);
     void sendIRCPrivMessage(const std::string& targetNickname, const std::string& senderNickname, const std::string& message);
     std::string sendIRCMessage(const std::string& targetNickname,const std::string& msgType, const std::string& senderNickname, const std::string& message);
+
+    CommandHandler handlers[14];
+
 };
 std::string toLower(const std::string& str);
 std::string toUpper(const std::string& str);

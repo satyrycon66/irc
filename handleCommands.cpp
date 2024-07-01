@@ -78,7 +78,8 @@ void Server::handleJoinCommand(const char* buffer, int client_index) {
         joinChannel(channelName,password, _clients[client_index], client_index);
     }
 }
-void Server::handlePrivMsgCommand(int client_index, const char* buffer ,const Client& client) {
+void Server::handlePrivMsgCommand( const char* buffer ,int client_index) {
+    const Client& client = _clients[client_index];
     std::string command = removeCRLF(buffer);
     std::cout << "-Handling :" + command + ":\n";
     
@@ -208,6 +209,254 @@ void Server::handleTopicCommand(const char* buffer, int client_index) {
     }
 
 }
+void Server::handlePingCommand(const char* buffer, int client_index)
+{
+    std::string pongResponse = "PONG " + std::string(tempBuffer.c_str() + 5) + "\r\n";
+    send(_fds[client_index].fd, pongResponse.c_str(), pongResponse.length(), 0);
+}
+void Server::handleCAPCommand(const char* buffer, int client_index)
+{
+        if (strncmp(buffer, "CAP END ", 8) == 0) {
+            std::string response = ":server CAP * END\r\n";
+            send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+        }else if (strncmp(buffer, "CAP LS ", 7) == 0) {
+            std::string response = ":server CAP * LS :multi-prefix\r\n";
+        }else if (strncmp(buffer, "CAP REQ ", 8) == 0) {
+            std::string response = ":server CAP * ACK :multi-prefix\r\n";
+            send(_fds[client_index].fd, response.c_str(), response.length(), 0);
+        }
+}
+void Server::handleModeCommand(const char* buffer, int client_index)
+{
+    std::string command(buffer);
+    command = removeCRLF(command);
+    size_t first_space_pos = command.find(' ');
+    std::string mode_params = command.substr(first_space_pos + 1); // Get the part after "MODE "
+
+    // Extract the parameters: channel, modes, thirdParam
+    size_t second_space_pos = mode_params.find(' ');
+    std::string channel;
+    std::string modes;
+    std::string thirdParam;
+
+    if (second_space_pos != std::string::npos) {
+        channel = (mode_params.substr(0, second_space_pos)); // Extract channel name
+
+        size_t third_space_pos = mode_params.find(' ', second_space_pos + 1);
+        if (third_space_pos != std::string::npos) {
+            modes = removeCRLF(mode_params.substr(second_space_pos + 1, third_space_pos - second_space_pos - 1)); // Extract modes
+            thirdParam = removeCRLF(mode_params.substr(third_space_pos + 1)); // Extract thirdParam
+        } else {
+            modes = removeCRLF(mode_params.substr(second_space_pos + 1)); // Extract modes if thirdParam not found
+            thirdParam = "";
+        }
+    }
+        // std::cout <<"channel :"<< channel << ":\n";
+        // std::cout <<"modes :"<< modes << ":\n";
+        // std::cout <<"param :"<< thirdParam << ":\n";
+    if (modes == channel)
+        modes.clear();
+    if (thirdParam == channel)
+        thirdParam.clear();
+    if (!isValidMode(modes)) {
+        modes.clear();
+        thirdParam.clear();
+        // sendErrorMessage(client_index,"Invalid mode entry, handling only 'o', 'i', 't', 'k', 'l' preceded by operator +/-");
+        return;
+    }
+   
+    if (channel[0] == '#')
+    {
+        handleModeChannelCommand(channel,modes,thirdParam,client_index);
+        
+    } else if (!modes.empty() ){
+       Client *updateClient ;
+       std::vector<Channel>::iterator it = _channels.begin();
+       while (it != _channels.end()) {
+            if (it->hasClientNick(channel)) {
+                updateClient = it->getOneClient(channel);
+                
+                if(!it->getOneClient(_clients[client_index].getNick())->hasMode('o') && modes.find('o') != std::string::npos)
+                {
+                    std::string errorMessage = ":server 482 " + it->getOneClient(_clients[client_index].getNick())->getNick() + " " + it->getName() + " :You're not channel operator\r\n";
+                    send(_clients[client_index].getSocket(), errorMessage.c_str(), errorMessage.length(), 0);
+                }
+                else{
+
+                updateClient->setMode(modes);
+                std::string response = ":"+ it->getOneClient(_clients[client_index].getNick())->getNick() +" MODE " + it->getName() + " " + modes + " " + thirdParam + " "+ updateClient->getNick() + "\r\n";
+                send(_clients[client_index].getSocket(), response.c_str(), response.length(), 0);
+                sendChannelMessage(it->getName(),response,_clients[client_index].getSocket(),_clients[client_index]);
+                }
+                break ;
+            }   
+            it++;
+       }
+
+    }
+}
+void Server::handleKickCommand(const char* buffer, int client_index)
+{
+    std::string command(buffer);  // Convert buffer to std::string for easier manipulation
+
+    // Find the first space to separate the command from the rest
+    size_t first_space_pos = command.find(' ');
+    if (first_space_pos == std::string::npos) {
+        send(_clients[client_index].getSocket(), "400 Invalid command syntax", 25, 0);
+        return;
+    }
+    std::string kick_params = command.substr(first_space_pos + 1); // Get the part after "KICK "
+    
+    // Find the second space to separate the channel name from the user
+    size_t second_space_pos = kick_params.find(' ');
+    if (second_space_pos == std::string::npos) {
+        send(_clients[client_index].getSocket(), "400 Invalid command syntax", 25, 0);
+        return;
+    }
+
+    std::string channel = kick_params.substr(0, second_space_pos); // Extract the channel name
+    std::string target = kick_params.substr(second_space_pos + 1);
+
+    Channel* chan = findChannel(channel);
+    if (!chan) {
+        send(_clients[client_index].getSocket(), "403 ERR_NOSUCHCHANNEL", 22, 0);
+        return;
+    }
+    
+    Client *kicker = chan->getOneClient(_clients[client_index].getNick());
+    Client *kickTarget = chan->getOneClient(target);
+    if (!kickTarget) {
+        send(_clients[client_index].getSocket(), "403 ERR_NOSUCHNICK", 19, 0);
+        return;
+    }
+
+    // Vérifier les droits de l'utilisateur qui envoie la commande
+    std::string userNick = _clients[client_index].getNick();
+    std::string userMode = kicker->getAllModesString();
+
+    // Suppose que 'o' (opérateur) est le mode nécessaire pour kicker
+    if (userMode.find('o') != std::string::npos) {
+        std::string kickMessage = ":" + _clients[client_index].getNick() + "!~" + kickTarget->getUsername() + "@localhost KICK " + channel + " " + target + "\r\n";
+
+        // Send KICK message to all clients in the channel except the one being kicked
+        std::vector<Client> clients = chan->getClients();
+        std::vector<Client>::const_iterator it;
+        for (it = clients.begin(); it != clients.end(); ++it) {
+            const Client& chanClient = *it;
+            if (chanClient.getSocket() != kickTarget->getSocket()) {
+                send(chanClient.getSocket(), kickMessage.c_str(), kickMessage.length(), 0);
+            }
+        }
+
+        // Send KICK message to the client being kicked
+        send(kickTarget->getSocket(), kickMessage.c_str(), kickMessage.length(), 0);
+
+        // Remove the client from the channel
+        chan->removeClient(*kickTarget);
+
+        // Server console output
+        std::cout << "Client " << kickTarget->getSocket() << " was kicked from channel " << channel << " by client: " << std::to_string(_clients[client_index].getSocket()) << std::endl;
+    } else {
+        // Gestion de l'erreur : l'utilisateur n'a pas les droits nécessaires
+        std::string errorMessage = ":server 482 " + userNick + " " + channel + " :You're not channel operator\r\n";
+        send(_clients[client_index].getSocket(), errorMessage.c_str(), errorMessage.length(), 0);
+    }
+}
+void Server::handleNickCommand( const char* buffer, int client_index)
+{
+    std::cout << "-Handling " + std::string(buffer);
+    if (!_clients[client_index].isAuthenticated())
+    {
+        sendErrorMessage(client_index, "451 :You have not registered");
+        return;
+    }
+    // Find the start of the nickname after "NICK "
+    const char* nick_start = strstr(buffer, "NICK ") + 5;
+    
+    // Extract nickname until the next space or end of string
+    std::string nick;
+    while (*nick_start && !isspace(*nick_start)) {
+        nick += *nick_start++;
+    }
+
+    // Remove '\r' and '\n' characters from the nickname
+    nick.erase(std::remove(nick.begin(), nick.end(), '\r'), nick.end());
+    nick.erase(std::remove(nick.begin(), nick.end(), '\n'), nick.end());
+    if (clientExists(nick))
+    {
+        std::string msg = "433 ERR_NICKNAMEINUSE";
+        sendErrorMessage(client_index,msg);
+        return;
+    }
+    _clients[client_index].setNick(nick);
+    // Check if both NICK and USER commands have been received
+    if (_clients[client_index].isAuthenticated() &&!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+        sendWelcomeMessage(client_index);
+    }
+}
+void Server::handleUserCommand(const char* buffer, int client_index)
+{
+    // Find the start of the username after "USER "
+    std::cout << "-Handling " + std::string(buffer);
+    if (!_clients[client_index].isAuthenticated())
+    {
+        sendErrorMessage(client_index, "451 :You have not registered");
+        return;
+    }
+    const char* username_start = strstr(buffer, "USER ") + 5;
+    
+    // Extract username until the next space or end of string
+    std::string username;
+    while (*username_start && !isspace(*username_start)) {
+        username += *username_start++;
+    }
+    _clients[client_index].setUsername(username);
+    // Check if both NICK and USER commands have been received
+    if (_clients[client_index].isAuthenticated() &&!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+        sendWelcomeMessage(client_index);
+    }
+}
+void Server::handleClientDisconnect(Client& client)
+{
+    std::cout << "Client disconnected: " << client.getSocket() << std::endl;
+    for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        if (*it == client) {
+            _clients.erase(it);
+            close(it->getSocket());
+            break;
+        }
+    }
+}
+void Server::handlePassCommand(const char* buffer, int client_index)
+{
+    std::cout << "-Handling " << buffer;
+
+    // Find the start of the password after "PASS "
+    const char* pass_start = strstr(buffer, "PASS ") + 5;
+    
+    // Extract password until the next space or end of string
+    std::string password;
+    while (*pass_start && !isspace(*pass_start)) {
+        password += *pass_start++;
+    }
+
+    // Remove '\r' and '\n' characters from the password
+    password.erase(std::remove(password.begin(), password.end(), '\r'), password.end());
+    password.erase(std::remove(password.begin(), password.end(), '\n'), password.end());
+
+    // Compare the provided password with the stored password
+    if (password == _password) {
+        std::cout << "Password accepted for client " << _fds[client_index].fd << std::endl;
+        _clients[client_index].authenticate();
+    } else {
+        std::cout << "Password rejected for client " << _fds[client_index].fd << std::endl;
+
+        // Password rejected, handle accordingly (e.g., disconnect client, send error message)
+        sendErrorMessage(client_index, "Incorrect password");
+        handleClientDisconnect( _clients[client_index]);
+    }
+}
+
 void Server::sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client) {
     // Find the channel in _channels map
     Channel* channel = findChannel(channelName);
