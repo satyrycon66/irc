@@ -9,7 +9,7 @@ const std::string& Channel::getTopic() const {    return _topic;}
 std::string Channel::getMode() { return _channelModes;}
 const std::string& Channel::getPassword() const{ return _password;}
 int Channel::getUserMax() const{ return _userLimit;}
-const std::vector<Client>& Channel::getClients() const {    return this->_clients;}
+std::vector<Client> Channel::getClients() const {    return this->_clients;}
 std::vector<int> Channel::getSockets() const {
         std::vector<int> sockets;
         std::vector<Client>::const_iterator it;
@@ -23,7 +23,7 @@ Client* Channel::getOneClient(const std::string& nick) {
         if (toLower(it->getNick()) == searchedNick) 
             return &(*it);  // Return a pointer to the found client 
     }
-        std::cerr << "Client not Found: " << nick << "." <<std::endl;
+        // std::cerr << "Client not Found: " << nick << "." <<std::endl;
         return NULL;  // Return NULL if client with given nick is not found
 }
 

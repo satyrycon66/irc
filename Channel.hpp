@@ -18,7 +18,7 @@ public:
     void addClient(const Client& client);
     void removeClient(const Client& client);
     void removeClientByName(const std::string& nickName);
-    const std::vector<Client>& getClients() const ;
+    std::vector<Client> getClients() const ;
     std::vector<int> getSockets() const ;
     const std::string& getTopic() const;
     void setTopic(const std::string& topic);

@@ -34,7 +34,7 @@ public:
     void run();
     void createChannel(const std::string& name, const std::string& password);
     void joinChannel(const std::string& channelName,const std::string& password, const Client& client,int client_index);
-    void leaveChannel(const std::string& channelName, const Client& client);
+    void leaveChannel(const std::string& channelName, const Client& client, int client_index);
     void sendWelcomeMessage(int client_index);
     void sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client);
     void sendErrorMessage(int client_index, const std::string& message);
@@ -44,6 +44,7 @@ public:
     void initSignals();
 
 private:
+    int temp_index;
     bool _running;
     static Server* serverInstance; 
     int _port;

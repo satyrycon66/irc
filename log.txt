@@ -1,24 +1,38 @@
 Server started on port 6667
 New client connected: 4
-Received from client 4: PASS asd
-Handling PASS asd
+-Handling PASS asd
 Password accepted for client 4
-Received from client 4: CAP LS 302
-Received from client 4: NICK batman
-Handling NICK batman
-Handled client 4=> Nick: batman
-Unhandle message: NICK batman
-Received from client 4: USER bruce 0 * :bruce
-Handling USER bruce 0 * :bruce
-Handled client 4=> User: bruce
-Received from client 4: JOIN #allo
+-Handling NICK batman
+-Handling USER bruce 0 * :bruce
+TEST :#allo:
+TEST ::
 Creating Channel: #allo
 Channel created: #allo
 Trying to join channel: #allo
 Channel found: #allo
+Mode 'o' added for client batman
 Client 4 joined channel #allo
 Sending JOIN message to client: 4
-Received from client 4: MODE #allo
-Received from client 4: PING 10.18.200.40
-Received signal: 2. Terminating server...
+-Handling :PRIVMSG #allo :asd:
+New client connected: 5
+-Handling PASS asd
+Password accepted for client 5
+-Handling USER 12
+-Handling NICK 21
+TEST :#allo:
+TEST ::
+Trying to join channel: #allo
+Channel found: #allo
+Client 5 joined channel #allo
+Sending JOIN message to client: 4
+Sending JOIN message to client: 5
+-Handling :PRIVMSG #allo :allo:
+-Handling :PRIVMSG #allo allo:
+Client 5 left channel #allo
+Client Disconnected: 5
+Handling PART #allo :WeeChat 4.3.2
+Client 4 left channel #allo
+Removed channel #allo from channels.
+Unhandled message: QUIT :WeeChat 4.3.2
+Client Disconnected: 4
 Closing Server...

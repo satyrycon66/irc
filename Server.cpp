@@ -3,7 +3,7 @@
 Server::Server(int port, const std::string& password)
     : _port(port), _password(password), _running(false)
 {
-    initSignals();
+    temp_index = -1;
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_server_fd == -1) {
         throw std::runtime_error("Failed to create socket");
@@ -30,7 +30,7 @@ Server::Server(int port, const std::string& password)
     }
     _fds[0].fd = _server_fd;
     _fds[0].events = POLLIN;
-    _clients.push_back(Client(_server_fd));
+    _clients.push_back(Client(_server_fd, 0));
 
     commandMap[0].command = "USER ";
     commandMap[0].handler = &Server::handleUserCommand;
@@ -50,12 +50,12 @@ Server::Server(int port, const std::string& password)
     commandMap[7].handler = &Server::handlePingCommand;
     commandMap[8].command = "KICK ";
     commandMap[8].handler = &Server::handleKickCommand;
-    commandMap[9].command = "PART ";
-    commandMap[9].handler = &Server::handlePartCommand;
+    commandMap[9].command = "PRIVMSG ";
+    commandMap[9].handler = &Server::handlePrivMsgCommand;
     commandMap[10].command = "CAP ";
     commandMap[10].handler = &Server::handleCAPCommand;
-    commandMap[11].command = "PRIVMSG ";
-    commandMap[11].handler = &Server::handlePrivMsgCommand;
+    commandMap[11].command = "PART ";
+    commandMap[11].handler = &Server::handlePartCommand;
 }
 Server* Server::serverInstance = nullptr;
 Server::~Server()
@@ -65,6 +65,7 @@ Server::~Server()
 }
 void Server::run()
 {
+    initSignals();
     _running = true;
     std::cout << "Server started on port " << _port << std::endl;
 
@@ -107,7 +108,7 @@ void Server::acceptNewConnection() {
 
             _fds[i].fd = new_socket;
             _fds[i].events = POLLIN;
-            _clients.push_back(Client(new_socket));
+            _clients.push_back(Client(new_socket, i));
             std::cout << "New client connected: " << new_socket << std::endl;
             clientAdded = true;
             break;
@@ -122,22 +123,20 @@ void Server::acceptNewConnection() {
 }
 void Server::handleClientData(int client_index)
 {
-    if (std::string(buffer).find("\r\n") != std::string::npos ){
-        tempBuffer.clear();
-        bzero(buffer,1024);
-    }
+
+    bzero(buffer,1024);
     int valread = read(_fds[client_index].fd, buffer, sizeof(buffer) - 1);
     if (std::string(buffer).find("\r\n") == std::string::npos  && valread) // if message doesnt end with /r/n
     {
-        std::cout << "Incomplete message: " << buffer << ":\n";
         tempBuffer += (std::string(buffer));
+        std::cout << "Incomplete message: " << buffer;
+        temp_index = client_index;
         if (tempBuffer.find("\n") != std::string::npos)
             tempBuffer.erase(tempBuffer.find("\n"));
-        std::cout << "temp: " << tempBuffer << std::endl;
-    }
-    else if (valread <= 0) {
+    } else if (valread <= 0) {
         if (valread == 0) {
-            std::cout << "Client disconnected: " << _fds[client_index].fd << std::endl;
+            handleClientDisconnect(_clients[client_index]);
+            return ;
         } else {
             std::cerr << "Read error from client: " << _fds[client_index].fd << std::endl;
         }
@@ -153,21 +152,30 @@ void Server::handleClientData(int client_index)
         }
         _fds[client_index].fd = -1;
     } else {
-        tempBuffer += (std::string(buffer));
-        tempBuffer.erase(tempBuffer.find("\r\n"));
-        tempBuffer += "\r\n";
-        bool handled = false;
-
-        for (int i = 0; i < 10; ++i) {
-            if (strncmp(tempBuffer.c_str(), commandMap[i].command, strlen(commandMap[i].command)) == 0) {
-                (this->*commandMap[i].handler)(tempBuffer.c_str(), client_index);
-                handled = true;
-                tempBuffer.clear();
-                break;
-            }
+        std::string data;
+        if (temp_index == client_index){
+            tempBuffer += (std::string(buffer));
+            tempBuffer.erase(tempBuffer.find("\r\n"));
+            tempBuffer += "\r\n";
+            data += tempBuffer;
         }
-        if (!handled) {
-            std::cout << "Unhandled message: " << tempBuffer << std::endl;
+        else{
+            data += std::string(buffer);
+            data.erase(data.find("\r\n"));
+            data += "\r\n";
+        }
+        for (int i = 0; i < 12; i++) {
+            if (strncmp(data.c_str(), commandMap[i].command, strlen(commandMap[i].command)) == 0) {
+                (this->*commandMap[i].handler)(data.c_str(), client_index);
+                break;
+                }
+            if (i == 11)
+                std::cout << "Unhandled message: " << data; ///////////////////////////////////////////////////////////////////r
+            }
+
+        if (std::string(buffer).find("\r\n") != std::string::npos && temp_index == client_index){
+        tempBuffer.clear();
+        temp_index = -1;
         }
     }
 
@@ -222,7 +230,7 @@ void Server::joinChannel(const std::string& channelName,const std::string& passw
             channel->addClient(client);
         std::cout << "Client " << client.getSocket() << " joined channel " << channelName << std::endl;
         // Construire le message JOIN
-        std::string joinMessage = ":" + client.getNick() + "!" + client.getUsername() + "@localhost JOIN " + channelName + "\r\n";
+        std::string joinMessage = ":" + _clients[client_index].getNick() + "!" + client.getUsername() + "@localhost JOIN " + channelName + "\r\n";
         // Envoyer le message JOIN à tous les clients du canal
         std::vector<Client> channelClients = channel->getClients();
         for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
@@ -235,7 +243,7 @@ void Server::joinChannel(const std::string& channelName,const std::string& passw
             send(client.getSocket(), modeMessage.c_str(), modeMessage.length(), 0); 
         }
         // Constructing the NAMES message
-        std::string namesMessage = ":server 353 " + client.getNick() + " = " + channelName + " :";
+        std::string namesMessage = ":server 353 " + _clients[client_index].getNick() + " = " + channelName + " :";
 
         // Append nicknames of users in the channel with modes
         for (std::vector<Client>::iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
@@ -253,7 +261,7 @@ void Server::joinChannel(const std::string& channelName,const std::string& passw
         send(client.getSocket(), namesMessage.c_str(), namesMessage.length(), 0);
 
         // Envoyer le message de fin NAMES au client qui a rejoint
-        std::string endNamesMessage = ":server 366 " + client.getNick() + " " + channelName + " :End of /NAMES list.\r\n";
+        std::string endNamesMessage = ":server 366 " + _clients[client_index].getNick() + " " + channelName + " :End of /NAMES list.\r\n";
         send(client.getSocket(), endNamesMessage.c_str(), endNamesMessage.length(), 0);
         
         } else {
@@ -261,32 +269,32 @@ void Server::joinChannel(const std::string& channelName,const std::string& passw
         send(_clients[client_index].getSocket(), "403 ERR_NOSUCHCHANNEL", 22, 0);
         }
 }
-void Server::leaveChannel(const std::string& channelName, const Client& client)
+void Server::leaveChannel(const std::string& channelName, const Client& clientz,int client_index)
 {
     Channel* channel = findChannel(channelName);
     if (channel) {
-        if (channel->hasClient(client)) {
-            std::string partMessage = ":" + client.getNick() + "!~" + client.getUsername() + "@localhost PART " + channelName + "\r\n";
+        if (channel->hasClient(_clients[client_index])) {
+            std::string partMessage = ":" + _clients[client_index].getNick() + "!~" + _clients[client_index].getUsername() + "@localhost PART " + channelName + "\r\n";
 
             // Envoyer le message PART à tous les autres clients dans le canal
             std::vector<Client>::const_iterator it;
-            for (it = channel->getClients().begin(); it != channel->getClients().end(); ++it) {
+            for (it = channel->getClients().begin(); it != channel->getClients().end(); it++) {
                 const Client& chanClient = *it;
-                if (chanClient.getSocket() != client.getSocket()) {
+                if (chanClient.getSocket() != _clients[client_index].getSocket()) {
                     send(chanClient.getSocket(), partMessage.c_str(), partMessage.length(), 0);
                 }
             }
 
             // Envoyer le message PART au client lui-même
-            send(client.getSocket(), partMessage.c_str(), partMessage.length(), 0);
+            send(_clients[client_index].getSocket(), partMessage.c_str(), partMessage.length(), 0);
 
             // Supprimer le client du canal
-            channel->removeClient(client);
-            std::cout << "Client " << client.getSocket() << " left channel " << channelName << std::endl;
+            channel->removeClient(_clients[client_index]);
+            std::cout << "Client " << _clients[client_index].getSocket() << " left channel " << channelName << std::endl;
             // if (channel->isEmpty())
             //     removeChannel(*channel);
         } else {
-            std::cerr << "Client " << client.getSocket() << " is not in channel " << channelName << std::endl;
+            std::cerr << "Client " << _clients[client_index].getSocket() << " is not in channel " << channelName << std::endl;
         }
     
     } else {
