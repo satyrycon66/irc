@@ -430,23 +430,25 @@ void Server::handleUserCommand(const char* buffer, int client_index)
         sendWelcomeMessage(client_index);
     }
 }
-void Server::handleClientDisconnect(Client& client)
+void Server::handleClientDisconnect(Client client)
 {
     if (client.getIndex() == temp_index)
     {
         tempBuffer.clear();
         temp_index = -1;
     }
-    for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); it++){
+    for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ++it){
         if (it->hasClientNick(client.getNick())) {
             leaveChannel(it->getName(),client, client.getIndex());
-            break;
+            // break;
         }
     }
     for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); it++) {
         if (*it == client) {
+            std::cout << "Removing client:" << client.getNick() << " "<< client.getSocket() << "\n";
+            _fds[it->getIndex()].fd = -1;/////////////
+            // close(it->getSocket());
             _clients.erase(it);
-            close(it->getSocket());
             break;
         }
     }
@@ -478,7 +480,7 @@ void Server::handlePassCommand(const char* buffer, int client_index)
 
         // Password rejected, handle accordingly (e.g., disconnect client, send error message)
         sendErrorMessage(client_index, "Incorrect password");
-        handleClientDisconnect( _clients[client_index]);
+        // handleClientDisconnect( _clients[client_index]);
     }
 }
 

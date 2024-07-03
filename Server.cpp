@@ -61,7 +61,11 @@ Server* Server::serverInstance = nullptr;
 Server::~Server()
 {
     std::cout << "Closing Server...\n";
-    close(_server_fd);
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (_fds[i].fd > 0)
+            close(_fds[i].fd );
+    }
 }
 void Server::run()
 {
@@ -126,14 +130,8 @@ void Server::handleClientData(int client_index)
 
     bzero(buffer,1024);
     int valread = read(_fds[client_index].fd, buffer, sizeof(buffer) - 1);
-    if (std::string(buffer).find("\r\n") == std::string::npos  && valread) // if message doesnt end with /r/n
-    {
-        tempBuffer += (std::string(buffer));
-        std::cout << "Incomplete message: " << buffer;
-        temp_index = client_index;
-        if (tempBuffer.find("\n") != std::string::npos)
-            tempBuffer.erase(tempBuffer.find("\n"));
-    } else if (valread <= 0) {
+    std::cout << "Recieving:" << removeCRLF(std::string(buffer)) << ":" << _fds[client_index].fd <<":\n";
+      if (valread <= 0) {
         if (valread == 0) {
             handleClientDisconnect(_clients[client_index]);
             return ;
@@ -151,9 +149,16 @@ void Server::handleClientData(int client_index)
             }
         }
         _fds[client_index].fd = -1;
-    } else {
+    } else if (std::string(buffer).find("\r\n") == std::string::npos  && valread) // if message doesnt end with /r/n
+    {
+        tempBuffer += (std::string(buffer));
+        std::cout << "Incomplete message: " << buffer;
+        temp_index = client_index;
+        if (tempBuffer.find("\n") != std::string::npos)
+            tempBuffer.erase(tempBuffer.find("\n"));
+     }else {
         std::string data;
-        if (temp_index == client_index){
+        if (temp_index == client_index && tempBuffer != std::string(buffer)){
             tempBuffer += (std::string(buffer));
             tempBuffer.erase(tempBuffer.find("\r\n"));
             tempBuffer += "\r\n";
@@ -277,13 +282,7 @@ void Server::leaveChannel(const std::string& channelName, const Client& clientz,
             std::string partMessage = ":" + _clients[client_index].getNick() + "!~" + _clients[client_index].getUsername() + "@localhost PART " + channelName + "\r\n";
 
             // Envoyer le message PART à tous les autres clients dans le canal
-            std::vector<Client>::const_iterator it;
-            for (it = channel->getClients().begin(); it != channel->getClients().end(); it++) {
-                const Client& chanClient = *it;
-                if (chanClient.getSocket() != _clients[client_index].getSocket()) {
-                    send(chanClient.getSocket(), partMessage.c_str(), partMessage.length(), 0);
-                }
-            }
+            sendChannelMessage(channelName,partMessage,client_index,clientz);
 
             // Envoyer le message PART au client lui-même
             send(_clients[client_index].getSocket(), partMessage.c_str(), partMessage.length(), 0);

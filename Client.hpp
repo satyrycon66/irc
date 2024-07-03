@@ -10,6 +10,7 @@ public:
     Client(int socket,int index);
     ~Client();
     // Client(const std::string& username);
+    void setSocket(int socket);
     int getSocket() const;
     int getIndex() const;
     const std::string& getUsername() const;

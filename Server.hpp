@@ -78,7 +78,7 @@ private:
     void handlePingCommand(const char* buffer, int client_index);
     // void handleUserCommand(int client_index, const char* buffer);
     void handleUserCommand(const char* buffer, int client_index);
-    void handleClientDisconnect(Client& client);
+    void handleClientDisconnect(Client client);
     void handleModeChannelCommand(std::string channel, std::string modes, std::string thirdParam,int client_index);
     Channel* findChannel(const std::string& channelName);
     void removeChannel(const Channel& channel);

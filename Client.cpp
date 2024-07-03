@@ -9,7 +9,7 @@ int Client::getSocket() const { return _socket;}
 int Client::getIndex() const { return _index;}
 const std::string& Client::getNick() const {return _nick;}
 const std::string& Client::getUsername() const{    return _username;}
-
+void Client::setSocket(int socket) {_socket = socket;}
 void Client::setUsername(const std::string& username){    _username = username;}
 void Client::setNick(const std::string& nick){    _nick = nick;}
 void Client::authenticate(){    _authenticated = true;}
@@ -66,10 +66,14 @@ void Client::setMode(const std::string& modes) {
 std::string Client::getAllModesString() const {       return _userModes;}
 std::vector<Channel> Client::getInvitedChannel() const{ return _invitedChannels;}
 bool Client::operator==(const Client& other) const {
-    return this->_username == other._username && this->_nick == other._nick; 
+    if (this->_username == other._username && this->_nick == other._nick)
+        return true;
+    return false;
 }
 bool Client::operator!=(const Client& other) const {
-    return this->_username != other._username || this->_nick != other._nick; 
+    if (this->_username != other._username || this->_nick != other._nick)
+        return true;
+    return false;
     // return !(*this == other); // Utilisation de l'opérateur == pour définir !=
 }
 
