@@ -56,6 +56,8 @@ Server::Server(int port, const std::string& password)
     commandMap[10].handler = &Server::handleCAPCommand;
     commandMap[11].command = "PART ";
     commandMap[11].handler = &Server::handlePartCommand;
+    commandMap[12].command = "QUIT ";
+    commandMap[12].handler = &Server::handleQuitCommand;
 }
 Server* Server::serverInstance = nullptr;
 Server::~Server()
@@ -66,6 +68,7 @@ Server::~Server()
         if (_fds[i].fd > 0)
             close(_fds[i].fd );
     }
+    close(_server_fd);
 }
 void Server::run()
 {
@@ -110,10 +113,10 @@ void Server::acceptNewConnection() {
     for (int i = 1; i < MAX_CLIENTS; ++i) {
         if (_fds[i].fd == -1) {
 
-            _fds[i].fd = new_socket;
-            _fds[i].events = POLLIN;
-            _clients.push_back(Client(new_socket, i));
-            std::cout << "New client connected: " << new_socket << std::endl;
+            _fds[_clients.size()].fd = new_socket;
+            _fds[_clients.size()].events = POLLIN;
+            _clients.push_back(Client(new_socket,_clients.size()));
+            std::cout << "New client " << _clients.size() - 1  << " connected on socket: " << new_socket << std::endl;
             clientAdded = true;
             break;
         }
@@ -127,18 +130,19 @@ void Server::acceptNewConnection() {
 }
 void Server::handleClientData(int client_index)
 {
-
     bzero(buffer,1024);
-    int valread = read(_fds[client_index].fd, buffer, sizeof(buffer) - 1);
-    std::cout << "Recieving:" << removeCRLF(std::string(buffer)) << ":" << _fds[client_index].fd <<":\n";
+    int valread = recv(_fds[client_index].fd, buffer, sizeof(buffer) - 1, 0);
+    std::cout << "Recieving:" << removeCRLF(std::string(buffer)) << "\n";
       if (valread <= 0) {
         if (valread == 0) {
-            handleClientDisconnect(_clients[client_index]);
+            _clients[client_index].setDisconnected();
+            handleQuitCommand(NULL,client_index);
             return ;
         } else {
             std::cerr << "Read error from client: " << _fds[client_index].fd << std::endl;
         }
 
+        // handleClientDisconnect(_clients[client_index]);
         close(_fds[client_index].fd);
 
         // Supprimer le client de la liste des clients
@@ -169,12 +173,12 @@ void Server::handleClientData(int client_index)
             data.erase(data.find("\r\n"));
             data += "\r\n";
         }
-        for (int i = 0; i < 12; i++) {
+        for (int i = 0; i < 13; i++) {
             if (strncmp(data.c_str(), commandMap[i].command, strlen(commandMap[i].command)) == 0) {
                 (this->*commandMap[i].handler)(data.c_str(), client_index);
                 break;
                 }
-            if (i == 11)
+            if (i == 12)
                 std::cout << "Unhandled message: " << data; ///////////////////////////////////////////////////////////////////r
             }
 
@@ -238,7 +242,7 @@ void Server::joinChannel(const std::string& channelName,const std::string& passw
         std::string joinMessage = ":" + _clients[client_index].getNick() + "!" + client.getUsername() + "@localhost JOIN " + channelName + "\r\n";
         // Envoyer le message JOIN à tous les clients du canal
         std::vector<Client> channelClients = channel->getClients();
-        for (std::vector<Client>::const_iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
+        for (std::vector<Client>::iterator it = channelClients.begin(); it != channelClients.end(); ++it) {
             std::cout << "Sending JOIN message to client: " << it->getSocket() << std::endl; // Message de débogage
             send(it->getSocket(), joinMessage.c_str(), joinMessage.length(), 0);
         }

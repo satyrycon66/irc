@@ -2,13 +2,17 @@
 #include "Channel.hpp"
 #include "Server.hpp"
 
-Client::Client(int socket,int index): _socket(socket),_index(index), _authenticated(false){ return;}
-Client::~Client(){ return ;}
+Client::Client(int socket,int index): _socket(socket),_index(index),_isConnected(false), _authenticated(false){ return;}
+Client::~Client(){
+//    _socket = -1;
+   
+    return ;}
 
 int Client::getSocket() const { return _socket;}
 int Client::getIndex() const { return _index;}
 const std::string& Client::getNick() const {return _nick;}
 const std::string& Client::getUsername() const{    return _username;}
+void Client::setIndex(int index) {_index = index;}
 void Client::setSocket(int socket) {_socket = socket;}
 void Client::setUsername(const std::string& username){    _username = username;}
 void Client::setNick(const std::string& nick){    _nick = nick;}
@@ -76,8 +80,19 @@ bool Client::operator!=(const Client& other) const {
     return false;
     // return !(*this == other); // Utilisation de l'opérateur == pour définir !=
 }
-
-
+void Client::setDisconnected(){ _isConnected = false;}
+void Client::setConnected(){ _isConnected = true;}
+bool Client::getConnectStatus(){ return _isConnected;}
+void Client::clear(){
+    this->_nick.clear();
+    this->_username.clear();
+    this->_authenticated = false;
+    this->_index = -1;
+    this->_socket = -1;
+    this->_invitedChannels.clear();
+    this->_isConnected = false;
+    this->_userModes.clear();
+}
 
 
 // /server add IRC5 localhost/6667 -notls

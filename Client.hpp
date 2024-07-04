@@ -10,6 +10,7 @@ public:
     Client(int socket,int index);
     ~Client();
     // Client(const std::string& username);
+    void setIndex(int index);
     void setSocket(int socket);
     int getSocket() const;
     int getIndex() const;
@@ -28,6 +29,10 @@ public:
     void setUserMode(const std::string& nick, const std::string& mode, int fd);
     std::string getAllModesString() const;
     std::vector<Channel> getInvitedChannel() const;
+    void setDisconnected();
+    void setConnected();
+    bool getConnectStatus();
+    void clear();
 
     
       // Opérateur de comparaison ==
@@ -42,6 +47,7 @@ private:
     std::string _nick;
     int _index;
     bool _authenticated;
+    bool _isConnected;
     std::string _userModes; // nick / modes
     std::vector<Channel> _invitedChannels;
 

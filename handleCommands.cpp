@@ -66,8 +66,6 @@ void Server::handleJoinCommand(const char* buffer, int client_index) {
     } else {
         password = ""; // Password is missing
     }
-    std::cout <<"TEST :" << channelName << ":\n";
-    std::cout <<"TEST :" << password << ":\n";
     if (channelName[0] != '#')
     {
         sendErrorMessage(client_index,  "Channel not found: " + channelName + ", Channels must start with '#'");
@@ -430,29 +428,40 @@ void Server::handleUserCommand(const char* buffer, int client_index)
         sendWelcomeMessage(client_index);
     }
 }
-void Server::handleClientDisconnect(Client client)
+void Server::handleClientDisconnect(int client_index)
 {
-    if (client.getIndex() == temp_index)
+    const int index = client_index;
+    if (index == temp_index)
     {
         tempBuffer.clear();
         temp_index = -1;
     }
     for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ++it){
-        if (it->hasClientNick(client.getNick())) {
-            leaveChannel(it->getName(),client, client.getIndex());
+        if (it->hasClientNick(_clients[client_index].getNick())) {
+            leaveChannel(it->getName(),_clients[client_index], index);
             // break;
         }
     }
+    bool decIndex = false;
     for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); it++) {
-        if (*it == client) {
-            std::cout << "Removing client:" << client.getNick() << " "<< client.getSocket() << "\n";
-            _fds[it->getIndex()].fd = -1;/////////////
-            // close(it->getSocket());
+        if (decIndex)
+            it->setIndex(it->getIndex() - 1);
+        if (!decIndex && it->getNick() == _clients[client_index].getNick()) {
+            std::cout << "Removing client: " << _clients[client_index].getIndex() << " nicknamed: " << _clients[client_index].getNick() << " on socket: "<< _clients[client_index].getSocket() << "\n";
+
+            close(_fds[index].fd);
+            close(it->getSocket());
+            close(_clients[client_index].getSocket());
+            _fds[index].fd = -1;/////////////
+            _clients[client_index].setIndex(-1);
             _clients.erase(it);
-            break;
+            if (it++ == _clients.end())
+                break;
+            _clients[index].setIndex(_clients[index].getIndex() - 1);
+            decIndex = true;
         }
     }
-    std::cout << "Client Disconnected: " << client.getSocket() << std::endl;
+    std::cout << "Client Disconnected: " << _clients[client_index].getSocket() << std::endl;
 }
 void Server::handlePassCommand(const char* buffer, int client_index)
 {
@@ -473,15 +482,20 @@ void Server::handlePassCommand(const char* buffer, int client_index)
 
     // Compare the provided password with the stored password
     if (password == _password) {
-        std::cout << "Password accepted for client " << _fds[client_index].fd << std::endl;
+        std::cout << "Password accepted for client " << client_index << std::endl;
         _clients[client_index].authenticate();
     } else {
-        std::cout << "Password rejected for client " << _fds[client_index].fd << std::endl;
+        std::cout << "Password rejected for client " << client_index<< std::endl;
 
         // Password rejected, handle accordingly (e.g., disconnect client, send error message)
         sendErrorMessage(client_index, "Incorrect password");
         // handleClientDisconnect( _clients[client_index]);
     }
+}
+void Server::handleQuitCommand(const char* buffer, int client_index){
+    std::cout << "-Handling :QUIT socket:" << _clients[client_index].getSocket() <<"\n";
+    handleClientDisconnect(client_index);
+
 }
 
 void Server::sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client) {
@@ -563,6 +577,7 @@ std::string Server::sendIRCMessage(const std::string& targetNickname,const std::
 }
 void Server::sendWelcomeMessage(int client_index)
 {
+    _clients[client_index].setConnected();
     std::string welcome = ":server 001 " + _clients[client_index].getNick() + " :Welcome to the IRC server\r\n";
     send(_fds[client_index].fd, welcome.c_str(), welcome.length(), 0);
 }
