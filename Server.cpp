@@ -347,7 +347,7 @@ void Server::handleModeChannelCommand(std::string channel, std::string modes, st
                 send(_clients[client_index].getSocket(), newlimit.c_str(), newlimit.length(), 0);
                 sendChannelMessage(channel,newlimit,_clients[client_index].getSocket(),_clients[client_index]);
                 return;
-            } else if (modes[0] == '+' && modes[1] == 'l' && !thirdParam.empty() && std::stoi(thirdParam) > 0 && isnumber(thirdParam[0]) < MAX_CLIENTS){
+            } else if (modes[0] == '+' && modes[1] == 'l' && !thirdParam.empty() && isnumber(thirdParam[0]) && (std::stoi(thirdParam) > 0 && std::stoi(thirdParam) < MAX_CLIENTS)){
                 chan->setMode(modes +" "+ thirdParam);
                 chan->setUserMax(std::stoi(thirdParam));
                 std::string newlimit = ":" + _clients[client_index].getNick() + " MODE " + channel + " " + modes +" "+ thirdParam + "\r\n";

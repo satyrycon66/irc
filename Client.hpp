@@ -64,9 +64,9 @@ std::string removeCRLF(const std::string& str);
 // /connect IRC5
 
 /*
-/server add IRC5 localhost/6667 -notls
-/set irc.server.IRC5.password secret
-/set irc.server.IRC5.nicks sim
-/set irc.server.IRC5.username simon
-/connect IRC5
+/server add IRC 10.18.200.40/6667 -notls
+/set irc.server.IRC.password asd
+/set irc.server.IRC.nicks sim
+/set irc.server.IRC.username simon
+/connect IRC
 */
