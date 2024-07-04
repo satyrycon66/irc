@@ -130,6 +130,8 @@ void Server::acceptNewConnection() {
 }
 void Server::handleClientData(int client_index)
 {
+
+
     bzero(buffer,1024);
     int valread = recv(_fds[client_index].fd, buffer, sizeof(buffer) - 1, 0);
     std::cout << "Recieving:" << removeCRLF(std::string(buffer)) << "\n";

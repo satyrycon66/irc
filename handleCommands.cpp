@@ -2,6 +2,11 @@
 
 void Server::handleInviteCommand(const char* buffer, int client_index) {
     std::cout << "Handling " + std::string(buffer);
+    if (!_clients[client_index].isConnected())
+    {
+        sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
+        return;
+    }
     std::string command(buffer);
     std::istringstream iss(command.substr(7)); // Ignorer le préfixe INVITE
     std::string nick;
@@ -50,6 +55,11 @@ void Server::handleInviteCommand(const char* buffer, int client_index) {
     }
 }
 void Server::handleJoinCommand(const char* buffer, int client_index) {
+    if (!_clients[client_index].isConnected())
+    {
+        sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
+        return;
+    }
     std::string command(buffer);
     std::istringstream iss(command.substr(5)); // Skip "JOIN"
 
@@ -80,6 +90,11 @@ void Server::handleJoinCommand(const char* buffer, int client_index) {
     }
 }
 void Server::handlePrivMsgCommand( const char* buffer ,int client_index) {
+    if (!_clients[client_index].isConnected())
+    {
+        sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
+        return;
+    }
     std::string command = removeCRLF(buffer);
     std::cout << "-Handling :" + command + ":\n";
     
@@ -142,6 +157,11 @@ void Server::handlePrivMsgCommand( const char* buffer ,int client_index) {
     }
 }
 void Server::handlePartCommand(const char* buffer, int client_index) {
+        if (!_clients[client_index].isConnected())
+    {
+        sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
+        return;
+    }
     std::cout << "Handling " + std::string(buffer);
     std::string command(buffer);
     std::istringstream iss(command.substr(5));
@@ -175,6 +195,11 @@ void Server::handlePartCommand(const char* buffer, int client_index) {
     }
 }
 void Server::handleTopicCommand(const char* buffer, int client_index) {
+        if (!_clients[client_index].isConnected())
+    {
+        sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
+        return;
+    }
     std::cout << "Handling " + std::string(buffer);
     std::string command(buffer);
     std::istringstream iss(command.substr(6));
@@ -240,6 +265,11 @@ void Server::handleCAPCommand(const char* buffer, int client_index)
 }
 void Server::handleModeCommand(const char* buffer, int client_index)
 {
+        if (!_clients[client_index].isConnected())
+    {
+        sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
+        return;
+    }
     std::string command(buffer);
     command = removeCRLF(command);
     size_t first_space_pos = command.find(' ');
@@ -403,6 +433,7 @@ void Server::handleNickCommand( const char* buffer, int client_index)
     _clients[client_index].setNick(nick);
     // Check if both NICK and USER commands have been received
     if (_clients[client_index].isAuthenticated() &&!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+        _clients[client_index].setConnected();
         sendWelcomeMessage(client_index);
     }
 }
@@ -425,23 +456,38 @@ void Server::handleUserCommand(const char* buffer, int client_index)
     _clients[client_index].setUsername(username);
     // Check if both NICK and USER commands have been received
     if (_clients[client_index].isAuthenticated() &&!_clients[client_index].getNick().empty() && !_clients[client_index].getUsername().empty()) {
+        _clients[client_index].setConnected();
         sendWelcomeMessage(client_index);
     }
 }
 void Server::handleClientDisconnect(int client_index)
 {
     const int index = client_index;
+    if (!_clients[client_index].isConnected())
+    {
+        for (std::vector<Client>::iterator it = _clients.begin() ; it != _clients.end(); it++)
+        {
+            if (*it == _clients[client_index])
+            {
+            _clients.erase(it);
+            close(it->getSocket());
+            return;
+            }
+        }
+    }
     int temp = _clients[client_index].getSocket();
     if (index == temp_index)
     {
         tempBuffer.clear();
         temp_index = -1;
     }
+    if (_channels.size() > 0){
     for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ++it){
         if (it->hasClientNick(_clients[client_index].getNick())) {
             leaveChannel(it->getName(),_clients[client_index], index);
             // break;
         }
+    }
     }
     bool decIndex = false;
     for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); it++) {
@@ -451,12 +497,11 @@ void Server::handleClientDisconnect(int client_index)
             std::cout << "Removing client: " << _clients[client_index].getIndex() << " nicknamed: " << _clients[client_index].getNick() << " on socket: "<< _clients[client_index].getSocket() << "\n";
 
             close(_fds[index].fd);
-            close(it->getSocket());
-            close(_clients[client_index].getSocket());
+            // close(it->getSocket());
+            // close(_clients[client_index].getSocket());
             _fds[index].fd = -1;/////////////
-            _clients[client_index].setIndex(-1);
             _clients.erase(it);
-            if (it++ == _clients.end())
+            if (it == _clients.end() || it++ == _clients.end())
                 break;
             _clients[index].setIndex(_clients[index].getIndex() - 1);
             decIndex = true;

@@ -82,7 +82,7 @@ bool Client::operator!=(const Client& other) const {
 }
 void Client::setDisconnected(){ _isConnected = false;}
 void Client::setConnected(){ _isConnected = true;}
-bool Client::getConnectStatus(){ return _isConnected;}
+bool Client::isConnected(){ return _isConnected;}
 void Client::clear(){
     this->_nick.clear();
     this->_username.clear();

@@ -31,7 +31,7 @@ public:
     std::vector<Channel> getInvitedChannel() const;
     void setDisconnected();
     void setConnected();
-    bool getConnectStatus();
+    bool isConnected();
     void clear();
 
     
