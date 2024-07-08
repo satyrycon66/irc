@@ -299,8 +299,6 @@ void Server::leaveChannel(const std::string& channelName, const Client& clientz,
 
             // Supprimer le client du canal
             channel->removeClientByName(_clients[client_index].getNick());
-            if (channel->isEmpty())
-                removeChannel(*channel);
             std::cout << "Client " << _clients[client_index].getSocket() << " left channel " << channelName << std::endl;
         } else {
             std::cerr << "Client " << _clients[client_index].getSocket() << " is not in channel " << channelName << std::endl;
