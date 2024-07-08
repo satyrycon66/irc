@@ -52,6 +52,7 @@ private:
     struct pollfd _fds[MAX_CLIENTS];
     std::vector<Client> _clients;
     std::vector<Channel> _channels;
+    
     struct sockaddr_in *_address;
     typedef void (Server::*CommandHandler)(const char*, int);
     struct commandMap {

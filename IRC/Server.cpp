@@ -63,11 +63,13 @@ Server* Server::serverInstance = nullptr;
 Server::~Server()
 {
     std::cout << "Closing Server...\n";
-    for (int i = 0; i < MAX_CLIENTS; i++)
+    for (int i = 1; i < MAX_CLIENTS; i++)
     {
         if (_fds[i].fd > 0)
             close(_fds[i].fd );
     }
+    _channels.clear();
+    _clients.clear();
     close(_server_fd);
 }
 void Server::run()

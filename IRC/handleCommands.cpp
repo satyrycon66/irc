@@ -197,22 +197,17 @@ void Server::handlePartCommand(const char* buffer, int client_index) {
             sendErrorMessage(client_index,"401 ERR_NOSUCHNICK :Client " + _clients[client_index].getNick() +" not found");
         else if (channel) {
                 leaveChannel(channelName, _clients[client_index],client_index);
-                if (channel->isEmpty())
-                    removeChannel(*channel);
-                std::cout << "Left channel\n";
+
                 if (client_index == temp_index)
                 {
                     tempBuffer.clear();
                     temp_index = -1;
                 }
-                else
-                    std::cerr << "Failed to leave channel " << channelName << std::endl;
-                }
                } else {
                std::cerr << "Channel not found: " << channelName << std::endl;
         }
-        std::cout << "Part done\n";
     }
+}
 
 void Server::handleTopicCommand(const char* buffer, int client_index) {
         if (!_clients[client_index].isConnected())
