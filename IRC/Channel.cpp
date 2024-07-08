@@ -1,6 +1,6 @@
 #include "Channel.hpp"
 
-Channel::Channel(const std::string& name,const std::string&password ) : _name(name), _password(password),_userLimit(-1) {return ; }
+Channel::Channel(const std::string& name,const std::string&password ) : _name(name), _password(password),_userLimit(-1) { std::cout << "Chanel :" << _name << "Created\n";return ; }
 
 Channel::~Channel() { return ;}
 
@@ -98,7 +98,7 @@ bool Channel::hasClientNick(std::string nick) const {
     return false;
 }
 bool Channel::isFull() const {
-        if (_clients.size() >= _userLimit && _userLimit > 0)
+        if ((int)_clients.size() >= _userLimit && _userLimit > 0)
             return true;
         return false;
     }
@@ -108,5 +108,4 @@ bool Channel::operator==(const Channel& other) const {
 }
 bool Channel::operator!=(const Channel& other) const {
     return this->_name != other._name; 
-    // return !(*this == other); // Utilisation de l'opérateur == pour définir !=
 }

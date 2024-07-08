@@ -22,6 +22,17 @@ std::string removeCRLF(const std::string& str) {
     }
     return result;
 }
+bool isNumber(const std::string& s) {
+    
+    if (s.empty()) return false;
+
+    for (std::string::const_iterator it = s.begin(); it != s.end(); ++it) {
+        if (!isdigit(*it)) {
+            return false;
+        }
+    }
+    return true;
+}
 bool isValidMode(const std::string& modes) {
     // Check if modes starts with '+' or '-' followed by one of 'o', 'i', 't', 'k', 'l'
     if (modes.size() < 2 || (modes[0] != '+' && modes[0] != '-'&& modes[0] != '#')) {

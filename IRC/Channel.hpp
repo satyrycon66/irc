@@ -24,7 +24,6 @@ public:
     void setTopic(const std::string& topic);
     void setName(const std::string& name);
     void setPassword(const std::string& Password);
-    void setUserMaxStr(const std::string& max);
     void setUserMax(int max);
     Client *getOneClient(const std::string& nick) ;
     void setMode(const std::string& mode);
@@ -47,12 +46,6 @@ private:
     std::string _channelModes;
     std::string _password;
     int _userLimit;
-    // std::string _userLimitStr;
-
-    // Private methods
-    bool isValidChannelMode(char mode) const;
-    bool isValidUserMode(char mode) const;
-    // Ajoutez d'autres membres ou méthodes privées selon les besoins
 };
 std::string toLower(const std::string& str);
 std::string removeCRLF(const std::string& str);

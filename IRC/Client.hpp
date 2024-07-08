@@ -9,7 +9,6 @@ class Client {
 public:
     Client(int socket,int index);
     ~Client();
-    // Client(const std::string& username);
     void setIndex(int index);
     void setSocket(int socket);
     int getSocket() const;
@@ -17,16 +16,13 @@ public:
     const std::string& getUsername() const;
     const std::string& getNick() const;
     bool isAuthenticated() const;
-    std::vector<std::string> getAllModes() const;
     void setNick(const std::string& nick);
     void setUsername(const std::string& username);
     void authenticate();
     void addInvintedChannel(Channel *channel);
     bool isInvitedChannel(Channel *channel) const;
-    bool isInChannel(const std::string& channelName) const;
     void setMode(const std::string& modes);
     bool hasMode(char mode) const ;
-    void setUserMode(const std::string& nick, const std::string& mode, int fd);
     std::string getAllModesString() const;
     std::vector<Channel> getInvitedChannel() const;
     void setDisconnected();

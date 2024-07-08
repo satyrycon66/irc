@@ -2,11 +2,11 @@
 #include "Channel.hpp"
 #include "Server.hpp"
 
-Client::Client(int socket,int index): _socket(socket),_index(index),_isConnected(false), _authenticated(false){ return;}
-Client::~Client(){
-//    _socket = -1;
-   
-    return ;}
+Client::Client(int socket,int index): _socket(socket),_index(index), _authenticated(false),_isConnected(false){ 
+    _nick = "";
+    _username = "";
+    return;}
+Client::~Client(){   return ;}
 
 int Client::getSocket() const { return _socket;}
 int Client::getIndex() const { return _index;}
@@ -78,7 +78,6 @@ bool Client::operator!=(const Client& other) const {
     if (this->_username != other._username || this->_nick != other._nick)
         return true;
     return false;
-    // return !(*this == other); // Utilisation de l'opérateur == pour définir !=
 }
 void Client::setDisconnected(){ _isConnected = false;}
 void Client::setConnected(){ _isConnected = true;}

@@ -21,11 +21,6 @@
 
 #define MAX_CLIENTS 100
 #include "Channel.hpp"
-// struct CommandHandler {
-//     const char* command;
-//     void (*handler)(const char*, int);};
-
-
 
 class Server {
 public:
@@ -42,8 +37,10 @@ public:
     Client *getClient(const std::string& nick);
     void stopRunning();
     void initSignals();
+    void checkClientActivity();
 
 private:
+    std::map<int, time_t> lastPingTimes;
     int temp_index;
     bool _running;
     static Server* serverInstance; 
@@ -77,7 +74,6 @@ private:
     void handleCAPCommand(const char* buffer, int client_index);
     void handlePingCommand(const char* buffer, int client_index);
     void handleQuitCommand(const char* buffer, int client_index);
-    // void handleUserCommand(int client_index, const char* buffer);
     void handleUserCommand(const char* buffer, int client_index);
     void handleClientDisconnect(int client_index);
     void handleModeChannelCommand(std::string channel, std::string modes, std::string thirdParam,int client_index);
@@ -93,4 +89,5 @@ std::string toLower(const std::string& str);
 std::string toUpper(const std::string& str);
 std::string removeCRLF(const std::string& str);
 bool isValidMode(const std::string& modes);
+bool isNumber(const std::string& s);
 #endif // SERVER_HPP

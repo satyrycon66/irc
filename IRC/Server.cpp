@@ -1,7 +1,7 @@
 #include "Server.hpp"
 
 Server::Server(int port, const std::string& password)
-    : _port(port), _password(password), _running(false)
+    : _running(false),_port(port) , _password(password)
 {
     temp_index = -1;
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -130,25 +130,25 @@ void Server::acceptNewConnection() {
 }
 void Server::handleClientData(int client_index)
 {
-
-
     bzero(buffer,1024);
     int valread = recv(_fds[client_index].fd, buffer, sizeof(buffer) - 1, 0);
-    std::cout << "Recieving:" << removeCRLF(std::string(buffer)) << "\n";
+    std::cout << "Recieving : " << removeCRLF(std::string(buffer)) << "\n";
       if (valread <= 0) {
         if (valread == 0) {
-            _clients[client_index].setDisconnected();
+            if (temp_index == client_index)
+            {
+                tempBuffer.clear();
+                temp_index = -1;
+            }
             handleQuitCommand(NULL,client_index);
             return ;
         } else {
             std::cerr << "Read error from client: " << _fds[client_index].fd << std::endl;
         }
-
-        // handleClientDisconnect(_clients[client_index]);
         close(_fds[client_index].fd);
 
         // Supprimer le client de la liste des clients
-        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end(); ++it) {
             if (it->getSocket() == _fds[client_index].fd) {
                 _clients.erase(it);
                 break;
@@ -282,22 +282,26 @@ void Server::joinChannel(const std::string& channelName,const std::string& passw
 }
 void Server::leaveChannel(const std::string& channelName, const Client& clientz,int client_index)
 {
+    (void)clientz;
+    if (channelName[0] != '#')
+    {
+        sendErrorMessage(client_index,  "Channel not found: " + channelName + ", Channels must start with '#'");
+        std::cerr << "Channel not found: " << channelName << std::endl;
+        return;
+    }
     Channel* channel = findChannel(channelName);
     if (channel) {
-        if (channel->hasClient(_clients[client_index])) {
+        if (channel->hasClientNick(_clients[client_index].getNick())) {
             std::string partMessage = ":" + _clients[client_index].getNick() + "!~" + _clients[client_index].getUsername() + "@localhost PART " + channelName + "\r\n";
 
             // Envoyer le message PART à tous les autres clients dans le canal
-            sendChannelMessage(channelName,partMessage,client_index,clientz);
-
-            // Envoyer le message PART au client lui-même
-            send(_clients[client_index].getSocket(), partMessage.c_str(), partMessage.length(), 0);
+            sendChannelMessage(channelName,partMessage,client_index,_clients[client_index]);
 
             // Supprimer le client du canal
-            channel->removeClient(_clients[client_index]);
+            channel->removeClientByName(_clients[client_index].getNick());
+            if (channel->isEmpty())
+                removeChannel(*channel);
             std::cout << "Client " << _clients[client_index].getSocket() << " left channel " << channelName << std::endl;
-            // if (channel->isEmpty())
-            //     removeChannel(*channel);
         } else {
             std::cerr << "Client " << _clients[client_index].getSocket() << " is not in channel " << channelName << std::endl;
         }
@@ -308,10 +312,11 @@ void Server::leaveChannel(const std::string& channelName, const Client& clientz,
 }
 Channel* Server::findChannel(const std::string& channelName)
 {
-    for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
+    for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ) {
         if (it->getName() == removeCRLF(channelName)) {
             return &(*it);
         }
+        it++;
     }
     return nullptr;
 }
@@ -324,7 +329,7 @@ void Server::removeChannel(const Channel& channel) {
             std::cout << "Removed channel " << channel.getName() << " from channels.\n";
             return ;
         }
-
+        it++;
     }
         std::cout << "Channel " << channel.getName() << " not found in _channels.\n";
     
@@ -349,29 +354,17 @@ void Server::handleModeChannelCommand(std::string channel, std::string modes, st
                 send(_clients[client_index].getSocket(), newlimit.c_str(), newlimit.length(), 0);
                 sendChannelMessage(channel,newlimit,_clients[client_index].getSocket(),_clients[client_index]);
                 return;
-            } else if (modes[0] == '+' && modes[1] == 'l' && !thirdParam.empty() && isnumber(thirdParam[0]) && (std::stoi(thirdParam) > 0 && std::stoi(thirdParam) < MAX_CLIENTS)){
+            } else if (modes[0] == '+' && modes[1] == 'l' && !thirdParam.empty() && isNumber(thirdParam) && (std::stoi(thirdParam) > 0 && std::stoi(thirdParam) < MAX_CLIENTS)){
                 chan->setMode(modes +" "+ thirdParam);
                 chan->setUserMax(std::stoi(thirdParam));
                 std::string newlimit = ":" + _clients[client_index].getNick() + " MODE " + channel + " " + modes +" "+ thirdParam + "\r\n";
                 send(_clients[client_index].getSocket(), newlimit.c_str(), newlimit.length(), 0);
                 sendChannelMessage(channel,newlimit,_clients[client_index].getSocket(),_clients[client_index]);
                 return;
-            } else if (modes[0] == '+' && modes[1] == 'k'){
-                chan->setMode(modes +" "+ thirdParam);
-                chan->setPassword(thirdParam);
-                std::string newpass = ":" + _clients[client_index].getNick() + " MODE " + channel + " " + modes +" "+ thirdParam +  "\r\n";
-                send(_clients[client_index].getSocket(), newpass.c_str(), newpass.length(), 0);
-                sendChannelMessage(channel,newpass,_clients[client_index].getSocket(),_clients[client_index]);
-                return;
-            } else if (modes[0] == '-' && modes[1] == 'k'){
-                chan->removeMode('k');
-                chan->setPassword("");
-                std::string newpass = ":" + _clients[client_index].getNick() + " MODE " + channel + " " + modes +  "\r\n";
-                send(_clients[client_index].getSocket(), newpass.c_str(), newpass.length(), 0);
-                sendChannelMessage(channel,newpass,_clients[client_index].getSocket(),_clients[client_index]);
-                return;
             }else if (modes[0] == '+' ){
                 chan->setMode(modes + " " + thirdParam);
+                if (modes[1] == 'k')
+                    chan->setPassword(thirdParam);
                 std::string newmode = ":" + _clients[client_index].getNick() + " MODE " + channel + " " + modes +" "+ thirdParam +  "\r\n";
                 send(_clients[client_index].getSocket(), newmode.c_str(), newmode.length(), 0);
                 sendChannelMessage(channel,newmode,_clients[client_index].getSocket(),_clients[client_index]);
@@ -379,6 +372,9 @@ void Server::handleModeChannelCommand(std::string channel, std::string modes, st
             }else if (modes[0] == '-' ){
                 for (size_t i = 1 ; i < modes.length(); i++)
                     chan->removeMode(modes[i]);
+                if (modes[1] == 'k'){
+                chan->removeMode('k');
+                chan->setPassword("");}
                 std::string removedMode = ":" + _clients[client_index].getNick() + " MODE " + channel + " " + modes +" "+ thirdParam +  "\r\n";
                 send(_clients[client_index].getSocket(), removedMode.c_str(), removedMode.length(), 0);
                 sendChannelMessage(channel,removedMode,_clients[client_index].getSocket(),_clients[client_index]);
@@ -432,13 +428,14 @@ void Server::initSignals() {
         signal(SIGQUIT, handleSignal);
 }
 void Server::handleSignal(int signal) {
+    (void) signal;
         if (serverInstance) {
             serverInstance->stopRunning();  // Access stopRunning through serverInstance
         }
 }
 Client *Server::getClient(const std::string& nick)
 {
-    for (std::vector<Client>::iterator it = _clients.begin();it != _clients.end(); it++)
+    for (std::vector<Client>::iterator it = _clients.begin() + 1;it != _clients.end(); it++)
     {
         if (it->getNick() == nick)
             return &(*it);
@@ -446,10 +443,29 @@ Client *Server::getClient(const std::string& nick)
     return nullptr;
 }
 bool Server::clientExists(const std::string& nick) {
-        for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end(); ++it) {
             if (it->getNick() == nick) {
                 return true; // Return true if Client with nickname found
             }
         }
         return false; // Return false if Client with nickname not found
+    }
+
+void Server::checkClientActivity() {
+        const int timeout = 90;  // Timeout in seconds (adjust as needed)
+        time_t currentTime = time(nullptr);
+        std::cout << "Time: " << (long long)currentTime << ":\n";
+        // Iterate through clients and check their last ping times
+        std::map<int, time_t>::iterator it = lastPingTimes.begin();
+        while (it != lastPingTimes.end()) {
+            if (currentTime - it->second > timeout || !_clients[it->first].isConnected()) {
+                std::cout << "--Client " << it->first << " has timed out!" << std::endl;
+                handleQuitCommand(NULL,it->first);
+                _clients[it->first].setDisconnected();
+                it = lastPingTimes.erase(it);
+            } else {
+                std::cout<< it->first <<": Last ping: "<< (currentTime - it->second) <<"\n" ;
+                ++it;
+            }
+        }
     }

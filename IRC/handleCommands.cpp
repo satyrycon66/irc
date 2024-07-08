@@ -11,9 +11,30 @@ void Server::handleInviteCommand(const char* buffer, int client_index) {
     std::istringstream iss(command.substr(7)); // Ignorer le préfixe INVITE
     std::string nick;
     std::string channelName;
-    iss >> nick; // Récupérer le nick à inviter
     iss >> channelName; // Récupérer le nom du canal
+    iss >> nick; // Récupérer le nick à inviter
+    if (channelName[0] != '#' && nick[0] != '#')
+    {
+        sendErrorMessage(client_index,  "Channel not found: " + channelName + ", Channels must start with '#'");
+        std::cerr << "Channel not found: " << channelName << std::endl;
+        return;
+    }
     Channel *channel = findChannel(channelName);
+    if (!channel)
+    {
+        channel = findChannel(nick);
+        if (!channel)
+        {
+            sendErrorMessage(client_index,  "Channel not found: " + channelName);
+            std::cerr << "Channel not found: " << channelName << std::endl;
+            return;
+        } else{
+            std::string temp = channelName;
+            channelName = nick;
+            nick = temp;
+        }
+    }
+
     if (!nick.empty() && !channelName.empty() && clientExists(nick))  {
         // Vérifier les droits de l'utilisateur qui envoie la commande
         std::string userNick = _clients[client_index].getNick();
@@ -128,7 +149,6 @@ void Server::handlePrivMsgCommand( const char* buffer ,int client_index) {
     }
     
     if (channelName[0] != '#' && !channelName.empty() && clientExists(channelName)){
-        // Client *sendingClient = &_clients[client_index];
         std::string targetUser = channelName;
         Client* targetClient = nullptr;
         for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
@@ -157,43 +177,41 @@ void Server::handlePrivMsgCommand( const char* buffer ,int client_index) {
     }
 }
 void Server::handlePartCommand(const char* buffer, int client_index) {
-        if (!_clients[client_index].isConnected())
+    if (!_clients[client_index].isConnected())
     {
         sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
         return;
     }
     std::cout << "Handling " + std::string(buffer);
-    std::string command(buffer);
+    std::string command(removeCRLF(std::string(buffer)));
     std::istringstream iss(command.substr(5));
 
     std::string channelName;
     iss >> channelName;
 
-    if (!channelName.empty()) {
+    if (!channelName.empty() && channelName[0] == '#') {
         Channel* channel = findChannel(channelName);
-        if (!channel->hasClientNick(_clients[client_index].getNick()))
+        if (!channel)
+            sendErrorMessage(client_index, "403 ERR_NOSUCHCHANNEL :Channel " + channelName +" not found");
+        else if (!channel->hasClientNick(_clients[client_index].getNick()))
             sendErrorMessage(client_index,"401 ERR_NOSUCHNICK :Client " + _clients[client_index].getNick() +" not found");
-        if (channel) {
-            try {
+        else if (channel) {
                 leaveChannel(channelName, _clients[client_index],client_index);
-                // Envoyer la réponse à WeeChat indiquant le succès
-                std::string response = ":server PART " + _clients[client_index].getNick() + " :" + channelName + " Leaving channel\r\n";
-                send(_fds[client_index].fd, response.c_str(), response.length(), 0);
-                if (channel->isEmpty())
-                    removeChannel(*channel);
-            if (client_index == temp_index)
-            {
-                tempBuffer.clear();
-                temp_index = -1;
-            }
-            } catch (const std::exception& e) {
-                std::cerr << "Failed to leave channel " << channelName << ": " << e.what() << std::endl;
-            }
-        } else {
-            std::cerr << "Channel not found: " << channelName << std::endl;
+                std::cout << "Left channel\n";
+                if (client_index == temp_index)
+                {
+                    tempBuffer.clear();
+                    temp_index = -1;
+                }
+                else
+                    std::cerr << "Failed to leave channel " << channelName << std::endl;
+                }
+               } else {
+               std::cerr << "Channel not found: " << channelName << std::endl;
         }
+        std::cout << "Part done\n";
     }
-}
+
 void Server::handleTopicCommand(const char* buffer, int client_index) {
         if (!_clients[client_index].isConnected())
     {
@@ -206,31 +224,31 @@ void Server::handleTopicCommand(const char* buffer, int client_index) {
 
     std::string channelName;
     iss >> channelName;
-
+    if (channelName[0] != '#')
+    {
+        sendErrorMessage(client_index,  "Channel not found: " + channelName + ", Channels must start with '#'");
+        std::cerr << "Channel not found: " << channelName << std::endl;
+        return;
+    }
     Channel* channel = findChannel(channelName);
-    if (channel->hasMode('t')){
-
-        if ((!channel->getOneClient(_clients[client_index].getNick())->hasMode('o')) && command.find(" :")!= std::string::npos)
-       {
-            std::string errorMessage = ":server 482 " + _clients[client_index].getNick() + " " + channelName + " :You're not channel operator\r\n";
+    if (channel) {
+        if (channel->hasMode('t')){
+            if ((!channel->getOneClient(_clients[client_index].getNick())->hasMode('o')) && command.find(" :")!= std::string::npos)
+            {
+                std::string errorMessage = ":server 482 " + _clients[client_index].getNick() + " " + channelName + " :You're not channel operator\r\n";
                 send(_fds[client_index].fd, errorMessage.c_str(), errorMessage.length(), 0);
                 return ;
+            }
         }
-    }
-
-        
-    if (channel) {
         size_t pos = command.find(" :");
         if (pos != std::string::npos) {
             // L'utilisateur souhaite changer le sujet
             std::string userNick = _clients[client_index].getNick();
             std::string userMode = channel->getOneClient(_clients[client_index].getNick())->getAllModesString();
-
             // Suppose que 'o' (opérateur) est le mode nécessaire pour changer le sujet
             
                 std::string topic = command.substr(pos + 2);
                 channel->setTopic(topic);
-
                 // Diffuser le nouveau sujet à tous les membres du canal
                 std::string topicMessage = ":" + _clients[client_index].getNick() + " TOPIC " + channelName + " :" + topic + "\r\n";
                 send(_clients[client_index].getSocket(), topicMessage.c_str(), topicMessage.length(), 0);
@@ -248,12 +266,18 @@ void Server::handleTopicCommand(const char* buffer, int client_index) {
 }
 void Server::handlePingCommand(const char* buffer, int client_index)
 {
-    std::string pongResponse = "PONG " + std::string(tempBuffer.c_str() + 5) + "\r\n";
+    std::cout << _clients[client_index].getNick() << " pinged\n";
+    lastPingTimes[client_index] = time(nullptr);
+    checkClientActivity();
+    std::string pongResponse = "PONG " + std::string(buffer + 5) + "\r\n";
     send(_fds[client_index].fd, pongResponse.c_str(), pongResponse.length(), 0);
 }
 void Server::handleCAPCommand(const char* buffer, int client_index)
 {
-        if (strncmp(buffer, "CAP END ", 8) == 0) {
+        if ((strstr(buffer, "NICK ") != nullptr) || (strstr(buffer, "USER ")!= nullptr)) {
+            handleNickCommand(buffer, client_index);
+            handleUserCommand(buffer,client_index );
+        }if (strncmp(buffer, "CAP END ", 8) == 0) {
             std::string response = ":server CAP * END\r\n";
             send(_fds[client_index].fd, response.c_str(), response.length(), 0);
         }else if (strncmp(buffer, "CAP LS ", 7) == 0) {
@@ -265,9 +289,9 @@ void Server::handleCAPCommand(const char* buffer, int client_index)
 }
 void Server::handleModeCommand(const char* buffer, int client_index)
 {
-        if (!_clients[client_index].isConnected())
+    if (!_clients[client_index].isConnected())
     {
-        sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
+        sendErrorMessage(client_index, "461 ERR_NEEDMOREPARAMS :You are not connected");
         return;
     }
     std::string command(buffer);
@@ -293,17 +317,14 @@ void Server::handleModeCommand(const char* buffer, int client_index)
             thirdParam = "";
         }
     }
-        // std::cout <<"channel :"<< channel << ":\n";
-        // std::cout <<"modes :"<< modes << ":\n";
-        // std::cout <<"param :"<< thirdParam << ":\n";
     if (modes == channel)
         modes.clear();
     if (thirdParam == channel)
         thirdParam.clear();
-    if (!isValidMode(modes)) {
+    if (!isValidMode(modes) && !modes.empty()) {
         modes.clear();
         thirdParam.clear();
-        // sendErrorMessage(client_index,"Invalid mode entry, handling only 'o', 'i', 't', 'k', 'l' preceded by operator +/-");
+        sendErrorMessage(client_index,"472 ERR_UNKNOWNMODE :Unknowned mode, handling only 'o', 'i', 't', 'k', 'l' preceded by operator +/-");
         return;
     }
    
@@ -313,9 +334,10 @@ void Server::handleModeCommand(const char* buffer, int client_index)
         
     } else if (!modes.empty() ){
        Client *updateClient ;
+       Channel *channelRef = nullptr;
        std::vector<Channel>::iterator it = _channels.begin();
        while (it != _channels.end()) {
-            if (it->hasClientNick(channel)) {
+            if (it->hasClientNick(channel) && it->hasClientNick(_clients[client_index].getNick())) {
                 updateClient = it->getOneClient(channel);
                 
                 if(!it->getOneClient(_clients[client_index].getNick())->hasMode('o') && modes.find('o') != std::string::npos)
@@ -331,10 +353,24 @@ void Server::handleModeCommand(const char* buffer, int client_index)
                 sendChannelMessage(it->getName(),response,_clients[client_index].getSocket(),_clients[client_index]);
                 }
                 break ;
-            }   
+            }else if (it->hasClientNick(_clients[client_index].getNick()) && !it->hasClientNick(channel)) {
+                channelRef = &(*it);
+            }
             it++;
        }
+        if (it ==_channels.end() && channelRef != nullptr)
+        {
+            std::string errorMessage;
+            if (clientExists(channel))
+              errorMessage = ":server 482 " + _clients[client_index].getNick() + " " + channelRef->getName() + " :" + channel + " not on channel" + channelRef->getName() + "\r\n";
+            else
+              errorMessage = ":server 482 " + _clients[client_index].getNick() + " " + channelRef->getName() + " :" + channel + " client doesnt exist\r\n";
 
+              send(_clients[client_index].getSocket(), errorMessage.c_str(), errorMessage.length(), 0);
+        } else if (channelRef == nullptr){
+            std::string errorMessage = ":server 482 " + _clients[client_index].getNick() + " :You are not on a channel\r\n";
+            sendErrorMessage(client_index,errorMessage);
+        }
     }
 }
 void Server::handleKickCommand(const char* buffer, int client_index)
@@ -463,25 +499,13 @@ void Server::handleUserCommand(const char* buffer, int client_index)
 void Server::handleClientDisconnect(int client_index)
 {
     const int index = client_index;
-    if (!_clients[client_index].isConnected())
-    {
-        for (std::vector<Client>::iterator it = _clients.begin() ; it != _clients.end(); it++)
-        {
-            if (*it == _clients[client_index])
-            {
-            _clients.erase(it);
-            close(it->getSocket());
-            return;
-            }
-        }
-    }
     int temp = _clients[client_index].getSocket();
     if (index == temp_index)
     {
         tempBuffer.clear();
         temp_index = -1;
     }
-    if (_channels.size() > 0){
+    if (_channels.size() > 0 && _clients[client_index].isConnected()){
     for (std::vector<Channel>::iterator it = _channels.begin(); it != _channels.end(); ++it){
         if (it->hasClientNick(_clients[client_index].getNick())) {
             leaveChannel(it->getName(),_clients[client_index], index);
@@ -490,22 +514,19 @@ void Server::handleClientDisconnect(int client_index)
     }
     }
     bool decIndex = false;
-    for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); it++) {
+    for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end();) {
         if (decIndex)
             it->setIndex(it->getIndex() - 1);
         if (!decIndex && it->getNick() == _clients[client_index].getNick()) {
-            std::cout << "Removing client: " << _clients[client_index].getIndex() << " nicknamed: " << _clients[client_index].getNick() << " on socket: "<< _clients[client_index].getSocket() << "\n";
+            std::cout << "Removing client: " << it->getIndex() << " nicknamed: " << it->getNick() << " on socket: "<< it->getSocket() << "\n";
 
-            close(_fds[index].fd);
-            // close(it->getSocket());
-            // close(_clients[client_index].getSocket());
+            close(it->getSocket());
+            decIndex = true;
             _fds[index].fd = -1;/////////////
             _clients.erase(it);
-            if (it == _clients.end() || it++ == _clients.end())
-                break;
-            _clients[index].setIndex(_clients[index].getIndex() - 1);
-            decIndex = true;
+            continue ;
         }
+        ++it;
     }
     std::cout << "Client Disconnected: " << temp << std::endl;
 }
@@ -535,17 +556,16 @@ void Server::handlePassCommand(const char* buffer, int client_index)
 
         // Password rejected, handle accordingly (e.g., disconnect client, send error message)
         sendErrorMessage(client_index, "Incorrect password");
-        // handleClientDisconnect( _clients[client_index]);
     }
 }
 void Server::handleQuitCommand(const char* buffer, int client_index){
+    (void)buffer;
     std::cout << "-Handling :QUIT socket:" << _clients[client_index].getSocket() <<"\n";
     handleClientDisconnect(client_index);
 
 }
-//sendChannelMessage(channelName, message, _fds[client_index].fd,sendingClient);
+
 void Server::sendChannelMessage(const std::string& channelName, const std::string& message, int senderSocket ,const Client& client) {
-    // Find the channel in _channels map
     Channel* channel = findChannel(channelName);
     if (!channel) {
         std::cerr << "Channel not found: " << channelName << std::endl;
@@ -553,66 +573,35 @@ void Server::sendChannelMessage(const std::string& channelName, const std::strin
     }
 
     // Get the list of clients in the channel
-    const std::vector<int> clientSockets = channel->getSockets();
     const std::vector<Client> channelClients = channel->getClients();
 
     // Send the message to all clients in the channel
-    std::vector<int>::const_iterator socketIt;
     std::vector<Client>::const_iterator clientIt;
 
     for (clientIt = channelClients.begin(); clientIt != channelClients.end(); clientIt++) {
         int clientSocket = clientIt->getSocket();
         int clientIndex = clientIt->getIndex();
-        if (clientSocket != senderSocket) {/////////////////////////////**********************************
-        // Find the index of the client in the clients vector
-        // int clientIndex = clientSocket - 4; // Assuming 4 is the offset for the client socket in your example
-
-        // Check bounds to avoid out-of-range access
-        if (clientIndex >= 0 && clientIndex < channelClients.size() + 1) {
-            if (message[0] == ':'){
-                std::cout << "sending: " << message << "\n"; 
-                send(clientSocket, message.c_str(), message.length(), 0);
-            }else{
-
-            std::string messageToSend = ":" + client.getNick() + " PRIVMSG " + channelName + " :" + message + "\r\n";
-            std::cout << "sending: " << messageToSend << "\n"; 
-            send(clientSocket, messageToSend.c_str(), messageToSend.length(), 0);
+        if (clientSocket != senderSocket) {
+            if (clientIndex >= 0 && clientIndex < (int)channelClients.size() + 1) {
+                if (message[0] == ':'){
+                    std::cout << "sending: " << message << "\n"; 
+                    send(clientSocket, message.c_str(), message.length(), 0);
+                }else{
+                    std::string messageToSend = ":" + client.getNick() + " PRIVMSG " + channelName + " :" + message + "\r\n";
+                    std::cout << "sending: " << messageToSend << "\n"; 
+                    send(clientSocket, messageToSend.c_str(), messageToSend.length(), 0);
             }
         }
         }
     }
-    ////
-//     for (socketIt = clientSockets.begin(); socketIt != clientSockets.end(); ++socketIt) {
-//     int clientSocket = *socketIt;
-    
-//     // Exclude the sender from receiving their own message
-//     if (clientSocket != senderSocket) {/////////////////////////////**********************************
-//         // Find the index of the client in the clients vector
-//         int clientIndex = clientSocket - 4; // Assuming 4 is the offset for the client socket in your example
-
-//         // Check bounds to avoid out-of-range access
-//         if (clientIndex >= 0 && clientIndex < channelClients.size()) {
-//             if (message[0] == ':'){
-//                 std::cout << "sending: " << message << "\n"; 
-//                 send(clientSocket, message.c_str(), message.length(), 0);
-//             }else{
-
-//             std::string messageToSend = ":" + client.getNick() + " PRIVMSG " + channelName + " :" + message + "\r\n";
-//             std::cout << "sending: " << messageToSend << "\n"; 
-//             send(clientSocket, messageToSend.c_str(), messageToSend.length(), 0);
-//             }
-//         }
-//     }
-// }
 }
 void Server::sendIRCPrivMessage(const std::string& targetNickname, const std::string& senderNickname, const std::string& message) {
     std::string replyMessage = ":" + targetNickname + " PRIVMSG " + senderNickname + " :" + message + "\r\n";
     
-    // Simulate sending the message to the client (replace this with actual socket send operation)
     int bytes_sent = send(getClient(targetNickname)->getSocket(),replyMessage.c_str(), replyMessage.length(), 0);
     if (bytes_sent == -1) {
         std::cerr << "Error: Failed to send message." << std::endl;
-    } else if (bytes_sent != replyMessage.length()) {
+    } else if (bytes_sent != (int)replyMessage.length()) {
         std::cout << "Warning: " << bytes_sent << " bytes out of " << replyMessage.length() << " were sent" << std::endl;
     } 
 }
