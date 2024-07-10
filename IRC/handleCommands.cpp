@@ -510,22 +510,31 @@ void Server::handleClientDisconnect(int client_index)
         }
     }
     }
-    bool decIndex = false;
-    for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end();) {
-        if (decIndex)
-            it->setIndex(it->getIndex() - 1);
-        if (!decIndex && it->getNick() == _clients[client_index].getNick()) {
-            std::cout << "Removing client: " << it->getIndex() << " nicknamed: " << it->getNick() << " on socket: "<< it->getSocket() << "\n";
+for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end();it++) {
 
-            close(it->getSocket());
-            decIndex = true;
-            _fds[index].fd = -1;/////////////
-            _clients.erase(it);
-            continue ;
-        }
-        ++it;
+    if (it->getNick() != "" ? it->getNick() == _clients[client_index].getNick() : it->getIndex() == _clients[client_index].getIndex()) {
+        std::cout << "Removing client: " << it->getIndex() << " nicknamed: " << it->getNick() << " on socket: "<< it->getSocket() << "\n";
+            // close(it->getSocket());
+            close(_fds[client_index].fd);
+            _fds[client_index].fd = -1;
+            _clients[client_index].setActiveStatus(false);
+            _clients[client_index].setNick("");
+            _clients[client_index].setUsername("");
+            // _clients[client_index].setMode("");
+            _clients[client_index].setDisconnected();
+            _clients[client_index].setAuth(false);
+            _clients[client_index].clearInvChannels();
+
+            // _clients.erase(it);
+            break ;
     }
-    std::cout << "Client Disconnected: " << temp << std::endl;
+
+}
+// for (int i = 1; i < (int)_clients.size(); i++)
+// {
+//     _clients[i].setIndex(i);
+// }
+std::cout << "Client socket disconnected: " << temp << std::endl;
 }
 void Server::handlePassCommand(const char* buffer, int client_index)
 {
@@ -577,9 +586,8 @@ void Server::sendChannelMessage(const std::string& channelName, const std::strin
 
     for (clientIt = channelClients.begin(); clientIt != channelClients.end(); clientIt++) {
         int clientSocket = clientIt->getSocket();
-        int clientIndex = clientIt->getIndex();
         if (clientSocket != senderSocket) {
-            if (clientIndex >= 0 && clientIndex < (int)channelClients.size() + 1) {
+            if (clientIt->getIndex() > 0 ) {
                 if (message[0] == ':'){
                     std::cout << "sending: " << message << "\n"; 
                     send(clientSocket, message.c_str(), message.length(), 0);

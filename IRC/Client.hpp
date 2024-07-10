@@ -10,12 +10,15 @@ public:
     Client(int socket,int index);
     ~Client();
     void setIndex(int index);
+    void decIndex();
     void setSocket(int socket);
     int getSocket() const;
     int getIndex() const;
     const std::string& getUsername() const;
     const std::string& getNick() const;
     bool isAuthenticated() const;
+    void setAuth(int _bool);
+    void clearInvChannels();
     void setNick(const std::string& nick);
     void setUsername(const std::string& username);
     void authenticate();
@@ -28,6 +31,8 @@ public:
     void setDisconnected();
     void setConnected();
     bool isConnected();
+    bool isActive() const;
+    void setActiveStatus(bool status);
     void clear();
 
     
@@ -38,6 +43,7 @@ public:
     bool operator!=(const Client& other) const;
 
 private:
+    bool _active;
     int _socket;
     std::string _username;
     std::string _nick;

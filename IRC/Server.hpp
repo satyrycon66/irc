@@ -37,6 +37,7 @@ public:
     Client *getClient(const std::string& nick);
     void stopRunning();
     void initSignals();
+    int getClientsSize() const;
     void checkClientActivity();
 
 private:

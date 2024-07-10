@@ -85,7 +85,7 @@ void Server::run()
             continue;
         }
 
-        for (int i = 0; i < MAX_CLIENTS; ++i) {
+        for (int i = 0; i < MAX_CLIENTS + getClientsSize(); ++i) {
             if (_fds[i].revents & POLLIN) {
                 if (_fds[i].fd == _server_fd) {
                     acceptNewConnection();
@@ -115,10 +115,11 @@ void Server::acceptNewConnection() {
     for (int i = 1; i < MAX_CLIENTS; ++i) {
         if (_fds[i].fd == -1) {
 
-            _fds[_clients.size()].fd = new_socket;
-            _fds[_clients.size()].events = POLLIN;
-            _clients.push_back(Client(new_socket,_clients.size()));
-            std::cout << "New client " << _clients.size() - 1  << " connected on socket: " << new_socket << std::endl;
+            _fds[i].fd = new_socket;
+            _fds[i].events = POLLIN;
+            _clients.push_back(Client(new_socket,i));
+            lastPingTimes[i] = time(nullptr);
+            std::cout << "New client " << i   << " connected on socket: " << new_socket << std::endl;
             clientAdded = true;
             break;
         }
@@ -132,6 +133,7 @@ void Server::acceptNewConnection() {
 }
 void Server::handleClientData(int client_index)
 {
+
     bzero(buffer,1024);
     int valread = recv(_fds[client_index].fd, buffer, sizeof(buffer) - 1, 0);
     std::cout << "Recieving : " << removeCRLF(std::string(buffer)) << "\n";
@@ -454,18 +456,35 @@ bool Server::clientExists(const std::string& nick) {
 void Server::checkClientActivity() {
         const int timeout = 90;  // Timeout in seconds (adjust as needed)
         time_t currentTime = time(nullptr);
-        std::cout << "Time: " << (long long)currentTime << ":\n";
         // Iterate through clients and check their last ping times
-        std::map<int, time_t>::iterator it = lastPingTimes.begin();
-        while (it != lastPingTimes.end()) {
-            if (currentTime - it->second > timeout || !_clients[it->first].isConnected()) {
-                std::cout << "--Client " << it->first << " has timed out!" << std::endl;
-                handleQuitCommand(NULL,it->first);
-                _clients[it->first].setDisconnected();
-                it = lastPingTimes.erase(it);
-            } else {
-                std::cout<< it->first <<": Last ping: "<< (currentTime - it->second) <<"\n" ;
-                ++it;
+        std::vector<Client>::iterator cIt = _clients.begin() + 1;
+        while (cIt != _clients.end())
+        {
+            int temp = 0;
+            if (currentTime - lastPingTimes[cIt->getIndex()] > timeout && cIt->isActive()){
+                std::cout << "--Client " << cIt->getIndex() << " has timed out!" << std::endl;
+                temp = cIt->getIndex();
+                cIt->setActiveStatus(false);
+        
+                for(std::map<int, time_t>::iterator it = lastPingTimes.begin(); it != lastPingTimes.end(); ++it){
+                    if (it->first == temp && temp > 0){
+                        std::cout<< it->first <<": Last ping: "<< (currentTime - it->second) <<"\n" ;
+                        lastPingTimes.erase(it);
+                        break;
+                    }
+                }
+                if (temp > 1){
+                    handleQuitCommand(NULL,temp);
+                }
             }
+            cIt++;
         }
-    }
+}
+    int Server::getClientsSize() const { 
+        int count = 0;
+        for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); it++)
+        {
+            if (it->isActive())
+                count++;
+        }
+    return count;}

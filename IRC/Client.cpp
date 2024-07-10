@@ -2,22 +2,27 @@
 #include "Channel.hpp"
 #include "Server.hpp"
 
-Client::Client(int socket,int index): _socket(socket),_index(index), _authenticated(false),_isConnected(false){ 
+Client::Client(int socket,int index): _active(true),_socket(socket),_index(index), _authenticated(false),_isConnected(false){ 
     _nick = "";
     _username = "";
     return;}
 Client::~Client(){   return ;}
 
+
 int Client::getSocket() const { return _socket;}
 int Client::getIndex() const { return _index;}
 const std::string& Client::getNick() const {return _nick;}
 const std::string& Client::getUsername() const{    return _username;}
+void Client::setAuth(int _bool) {_authenticated = _bool;}
 void Client::setIndex(int index) {_index = index;}
+void Client::decIndex() {_index--;std::cout << "New index: " << _index << std::endl;}
 void Client::setSocket(int socket) {_socket = socket;}
 void Client::setUsername(const std::string& username){    _username = username;}
 void Client::setNick(const std::string& nick){    _nick = nick;}
 void Client::authenticate(){    _authenticated = true;}
+void Client::setActiveStatus(bool status){    _active = status;}
 void Client::addInvintedChannel(Channel *channel){ _invitedChannels.push_back(*channel);}
+void Client::clearInvChannels(){ _invitedChannels.clear();}
 
 bool Client::isInvitedChannel(Channel *channel) const{    
     for (std::vector<Channel>::const_iterator it = _invitedChannels.begin(); it != _invitedChannels.end(); it++){
@@ -28,6 +33,7 @@ bool Client::isInvitedChannel(Channel *channel) const{
     return false ;  
     }
 bool Client::isAuthenticated() const{ return _authenticated;}
+bool Client::isActive() const{ return _active;}
 
 bool Client::hasMode(char mode) const {
     std::string modeString(1, mode);
