@@ -44,7 +44,7 @@ void Server::handleInviteCommand(const char* buffer, int client_index) {
             // Trouver le client invité dans la liste des clients
             Client* invitedClient = nullptr;
             for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); it++) {
-                if (it->getNick() == nick) {
+                if (it->getNick() == nick && it->isConnected()) {
                     invitedClient = &(*it);
                     break;
                 }

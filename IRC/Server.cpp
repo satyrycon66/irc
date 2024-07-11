@@ -85,7 +85,7 @@ void Server::run()
             continue;
         }
 
-        for (int i = 0; i < MAX_CLIENTS + getClientsSize(); ++i) {
+        for (int i = 0; i < MAX_CLIENTS; ++i) {
             if (_fds[i].revents & POLLIN) {
                 if (_fds[i].fd == _server_fd) {
                     acceptNewConnection();
@@ -124,7 +124,6 @@ void Server::acceptNewConnection() {
             break;
         }
     }
-
     // If no empty slot is found, close the new socket
     if (!clientAdded) {
         std::cerr << "Maximum number of clients reached. Connection refused: " << new_socket << std::endl;
@@ -147,18 +146,10 @@ void Server::handleClientData(int client_index)
             handleQuitCommand(NULL,client_index);
             return ;
         } else {
-            std::cerr << "Read error from client: " << _fds[client_index].fd << std::endl;
+            // std::cerr << "Read error from client: " << _fds[client_index].fd << std::endl;
+            return ;
+        // handleClientDisconnect(client_index);
         }
-        close(_fds[client_index].fd);
-
-        // Supprimer le client de la liste des clients
-        for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end(); ++it) {
-            if (it->getSocket() == _fds[client_index].fd) {
-                _clients.erase(it);
-                break;
-            }
-        }
-        _fds[client_index].fd = -1;
     } else if (std::string(buffer).find("\r\n") == std::string::npos  && valread) // if message doesnt end with /r/n
     {
         tempBuffer += (std::string(buffer));
@@ -446,7 +437,7 @@ Client *Server::getClient(const std::string& nick)
 }
 bool Server::clientExists(const std::string& nick) {
         for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end(); ++it) {
-            if (it->getNick() == nick) {
+            if (it->getNick() == nick ) {
                 return true; // Return true if Client with nickname found
             }
         }
