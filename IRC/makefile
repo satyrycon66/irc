@@ -19,4 +19,4 @@ fclean:
 re: fclean all
 
 run: re clean
-	./a.out 6667 asd 
+	./$(EXEC) 6667 asd 

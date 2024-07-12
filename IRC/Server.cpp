@@ -8,7 +8,8 @@ Server::Server(int port, const std::string& password)
     if (_server_fd == -1) {
         throw std::runtime_error("Failed to create socket");
     }
-
+    int optval = 1;
+    setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval) < 0);
     sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
@@ -145,7 +146,7 @@ void Server::handleClientData(int client_index)
 {
 
     bzero(buffer,1024);
-    int valread = recv(_fds[client_index].fd, buffer, sizeof(buffer) - 1, 0);
+    int valread = recv(_fds[client_index].fd, buffer, sizeof(buffer), 0);
     std::cout << "Recieving : " << removeCRLF(std::string(buffer)) << "\n";
       if (valread <= 0) {
         if (valread == 0) {
@@ -182,7 +183,7 @@ void Server::handleClientData(int client_index)
                 (this->*commandMap[i].handler)(data.c_str(), client_index);
                 break;
                 }
-            if (i == 12)
+            if (i == 13)
                 std::cout << "Unhandled message: " << data; ///////////////////////////////////////////////////////////////////r
             }
 
@@ -472,7 +473,7 @@ void Server::checkClientActivity() {
                         continue;
                     }
                 }
-                if (temp > 1){
+                if (temp > 0){
                     handleClientDisconnect(cIt->getIndex());
                 }
             }

@@ -218,7 +218,7 @@ void Server::handlePartCommand(const char* buffer, int client_index) {
 }
 
 void Server::handleTopicCommand(const char* buffer, int client_index) {
-        if (!_clients[client_index].isConnected())
+    if (!_clients[client_index].isConnected())
     {
         sendErrorMessage(client_index, "451 ERR_NOTREGISTERED :You have not registered");
         return;
@@ -237,6 +237,12 @@ void Server::handleTopicCommand(const char* buffer, int client_index) {
     }
     Channel* channel = findChannel(channelName);
     if (channel) {
+        if (!channel->hasClientNick(_clients[client_index].getNick()))
+        {
+            std::string errorMessage = ":server 482 " + _clients[client_index].getNick() + " :You are not on a channel\r\n";
+            sendErrorMessage(client_index,errorMessage);
+            return;
+        }
         if (channel->hasMode('t')){
             if ((!channel->getOneClient(_clients[client_index].getNick())->hasMode('o')) && command.find(" :")!= std::string::npos)
             {
@@ -279,10 +285,12 @@ void Server::handlePingCommand(const char* buffer, int client_index)
 }
 void Server::handleCAPCommand(const char* buffer, int client_index)
 {
-    std::cout << "-Handling " << buffer << std::endl;
+    std::cout << "--Handling " + std::string(buffer);
         if ((strstr(buffer, "NICK ") != nullptr) || (strstr(buffer, "USER ")!= nullptr)) {
-            handleNickCommand(buffer, client_index);
-            handleUserCommand(buffer,client_index );
+            if(strstr(buffer, "NICK ") != nullptr && _clients[client_index].getNick().empty() )
+                handleNickCommand(buffer, client_index);
+            if ((strstr(buffer, "USER ")!= nullptr) && _clients[client_index].getNick().empty())
+                handleUserCommand(buffer,client_index );
         }if (strncmp(buffer, "CAP END ", 8) == 0) {
             std::string response = ":server CAP * END\r\n";
             send(_fds[client_index].fd, response.c_str(), response.length(), 0);
@@ -300,6 +308,7 @@ void Server::handleModeCommand(const char* buffer, int client_index)
         sendErrorMessage(client_index, "461 ERR_NEEDMOREPARAMS :You are not connected");
         return;
     }
+    std::cout << "Handling " + std::string(buffer);
     std::string command(buffer);
     command = removeCRLF(command);
     size_t first_space_pos = command.find(' ');
@@ -448,7 +457,7 @@ void Server::handleKickCommand(const char* buffer, int client_index)
 }
 void Server::handleNickCommand( const char* buffer, int client_index)
 {
-    std::cout << "-Handling " + std::string(buffer);
+    std::cout << "-+Handling " + std::string(buffer);
     if (!_clients[client_index].isAuthenticated())
     {
         sendErrorMessage(client_index, "451 :You have not registered");
@@ -478,11 +487,13 @@ void Server::handleNickCommand( const char* buffer, int client_index)
         _clients[client_index].setConnected();
         sendWelcomeMessage(client_index);
     }
+    if ((strstr(buffer, "USER ")!= nullptr) && _clients[client_index].getUsername().empty())
+        handleUserCommand(buffer,client_index );
 }
 void Server::handleUserCommand(const char* buffer, int client_index)
 {
     // Find the start of the username after "USER "
-    std::cout << "-Handling " + std::string(buffer);
+    std::cout << "-+Handling " + std::string(buffer);
     if (!_clients[client_index].isAuthenticated())
     {
         sendErrorMessage(client_index, "451 :You have not registered");
@@ -501,6 +512,8 @@ void Server::handleUserCommand(const char* buffer, int client_index)
         _clients[client_index].setConnected();
         sendWelcomeMessage(client_index);
     }
+    if(strstr(buffer, "NICK ") != nullptr && _clients[client_index].getNick().empty()) 
+        handleNickCommand(buffer, client_index);
 }
 void Server::handleClientDisconnect(int client_index)
 {
@@ -542,7 +555,12 @@ std::cout << "Client socket disconnected: " << temp << std::endl;
 void Server::handlePassCommand(const char* buffer, int client_index)
 {
     std::cout << "-Handling " << buffer;
-
+    if ((strstr(buffer, "NICK ") != nullptr) || (strstr(buffer, "USER ")!= nullptr)) {
+            if(strstr(buffer, "NICK ") != nullptr && _clients[client_index].getNick().empty() )
+                handleNickCommand(buffer, client_index);
+            if ((strstr(buffer, "USER ")!= nullptr) && _clients[client_index].getNick().empty())
+                handleUserCommand(buffer,client_index );
+    }
     // Find the start of the password after "PASS "
     const char* pass_start = strstr(buffer, "PASS ") + 5;
     

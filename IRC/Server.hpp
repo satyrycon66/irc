@@ -20,7 +20,7 @@
 #include <sstream>
 
 #define MAX_CLIENTS 100
-#define TIMEOUT_TIME 90
+#define TIMEOUT_TIME 99999
 #define DEBUG 1
 #include "Channel.hpp"
 
