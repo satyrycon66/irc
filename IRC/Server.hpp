@@ -20,6 +20,8 @@
 #include <sstream>
 
 #define MAX_CLIENTS 100
+#define TIMEOUT_TIME 90
+#define DEBUG 1
 #include "Channel.hpp"
 
 class Server {
@@ -39,6 +41,8 @@ public:
     void initSignals();
     int getClientsSize() const;
     void checkClientActivity();
+    void printClients() const;
+    bool indexExists(int i) const ;
 
 private:
     std::map<int, time_t> lastPingTimes;

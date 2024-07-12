@@ -117,8 +117,19 @@ void Server::acceptNewConnection() {
 
             _fds[i].fd = new_socket;
             _fds[i].events = POLLIN;
-            _clients.push_back(Client(new_socket,i));
             lastPingTimes[i] = time(nullptr);
+            int j = 1;
+            bool add = true;
+            while( j < (int)_clients.size()) {
+
+                if (_clients[j].hasIndex(i) && !_clients[j].isActive()){
+                    _clients[j].setActiveStatus(true);
+                    add = false;
+                }
+                j++;
+            }
+            if (add)
+                _clients.push_back(Client(new_socket,i));
             std::cout << "New client " << i   << " connected on socket: " << new_socket << std::endl;
             clientAdded = true;
             break;
@@ -161,14 +172,10 @@ void Server::handleClientData(int client_index)
         std::string data;
         if (temp_index == client_index && tempBuffer != std::string(buffer)){
             tempBuffer += (std::string(buffer));
-            tempBuffer.erase(tempBuffer.find("\r\n"));
-            tempBuffer += "\r\n";
             data += tempBuffer;
         }
         else{
             data += std::string(buffer);
-            data.erase(data.find("\r\n"));
-            data += "\r\n";
         }
         for (int i = 0; i < 13; i++) {
             if (strncmp(data.c_str(), commandMap[i].command, strlen(commandMap[i].command)) == 0) {
@@ -183,6 +190,8 @@ void Server::handleClientData(int client_index)
         tempBuffer.clear();
         temp_index = -1;
         }
+        checkClientActivity();
+        printClients();
     }
 
 }
@@ -294,9 +303,9 @@ void Server::leaveChannel(const std::string& channelName, const Client& clientz,
 
             // Supprimer le client du canal
             channel->removeClientByName(_clients[client_index].getNick());
-            std::cout << "Client " << _clients[client_index].getSocket() << " left channel " << channelName << std::endl;
+            std::cout << "Client " << _clients[client_index].getIndex() << " left channel " << channelName << std::endl;
         } else {
-            std::cerr << "Client " << _clients[client_index].getSocket() << " is not in channel " << channelName << std::endl;
+            std::cerr << "Client " << _clients[client_index].getIndex() << " is not in channel " << channelName << std::endl;
         }
     
     } else {
@@ -445,7 +454,7 @@ bool Server::clientExists(const std::string& nick) {
     }
 
 void Server::checkClientActivity() {
-        const int timeout = 90;  // Timeout in seconds (adjust as needed)
+        const int timeout = TIMEOUT_TIME;  // Timeout in seconds (adjust as needed)
         time_t currentTime = time(nullptr);
         // Iterate through clients and check their last ping times
         std::vector<Client>::iterator cIt = _clients.begin() + 1;
@@ -455,17 +464,16 @@ void Server::checkClientActivity() {
             if (currentTime - lastPingTimes[cIt->getIndex()] > timeout && cIt->isActive()){
                 std::cout << "--Client " << cIt->getIndex() << " has timed out!" << std::endl;
                 temp = cIt->getIndex();
-                cIt->setActiveStatus(false);
         
                 for(std::map<int, time_t>::iterator it = lastPingTimes.begin(); it != lastPingTimes.end(); ++it){
                     if (it->first == temp && temp > 0){
                         std::cout<< it->first <<": Last ping: "<< (currentTime - it->second) <<"\n" ;
                         lastPingTimes.erase(it);
-                        break;
+                        continue;
                     }
                 }
                 if (temp > 1){
-                    handleQuitCommand(NULL,temp);
+                    handleClientDisconnect(cIt->getIndex());
                 }
             }
             cIt++;
@@ -479,3 +487,34 @@ void Server::checkClientActivity() {
                 count++;
         }
     return count;}
+
+    void Server::printClients()const {
+        int count = 0;
+        if (DEBUG){
+
+        for (std::vector<Client>::const_iterator clit = _clients.begin(); clit != _clients.end() ; clit++)
+        {   
+            std::cout << "________________________" << std::endl;
+            std::cout << "Client: " << count++ << std::endl;
+            std::cout << "________________________" << std::endl;
+            std::cout << "Nick: " << clit->getNick() << std::endl;
+            std::cout << "Username: " << clit->getUsername()<< std::endl;
+            std::cout << "Socket: " << clit->getSocket()<< std::endl;
+            std::cout << "Index: " << clit->getIndex()<< std::endl;
+            std::cout << "Active: " << clit->isActive()<< std::endl;
+            std::cout << "Authenticated: " << clit->isAuthenticated()<< std::endl;
+            std::cout << "Connected: " << clit->isConnected()<< std::endl;
+            std::cout << "________________________" << std::endl;
+
+        }
+        }
+    }
+
+    bool Server::indexExists(int i) const {
+        for (std::vector<Client>::const_iterator clit = _clients.begin(); clit != _clients.end() ; clit++)
+        {
+            if(clit->getIndex() == i)
+                return true;
+        }
+                return false;
+    }

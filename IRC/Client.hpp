@@ -30,10 +30,12 @@ public:
     std::vector<Channel> getInvitedChannel() const;
     void setDisconnected();
     void setConnected();
-    bool isConnected();
+    bool isConnected () const;
+    void resetClient();
     bool isActive() const;
     void setActiveStatus(bool status);
-    void clear();
+    bool hasIndex(int index) const;
+
 
     
       // Opérateur de comparaison ==

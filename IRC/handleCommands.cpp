@@ -34,6 +34,12 @@ void Server::handleInviteCommand(const char* buffer, int client_index) {
             nick = temp;
         }
     }
+    std::cout << "Test: nick = " << nick << " channel name = " <<channelName << "\n";
+    if (!getClient(nick)->isConnected()){
+        sendErrorMessage(client_index,"401 ERR_NOSUCHNICK :Client " + nick +" not found");
+        std::cerr << "Error: Client not found" << std::endl;
+        return ;
+    }
 
     if (!nick.empty() && !channelName.empty() && clientExists(nick))  {
         // Vérifier les droits de l'utilisateur qui envoie la commande
@@ -48,10 +54,12 @@ void Server::handleInviteCommand(const char* buffer, int client_index) {
                     invitedClient = &(*it);
                     break;
                 }
-                if (it == _clients.end())
+                if (it == _clients.end()){
                     sendErrorMessage(client_index,"401 ERR_NOSUCHNICK :Client " + nick +" not found");
+                    return ;
+                }
             }
-            if (invitedClient->getNick() == nick) {
+            if (invitedClient->getNick() == nick && invitedClient->isConnected()) {
                 invitedClient->addInvintedChannel(channel);
                 std::string inviteMessage = ":"+ channel->getOneClient(_clients[client_index].getNick())->getNick() + " INVITE " + nick + " " + channelName + "\r\n";
                 send(_fds[client_index].fd, inviteMessage.c_str(), inviteMessage.length(), 0);
@@ -60,12 +68,12 @@ void Server::handleInviteCommand(const char* buffer, int client_index) {
                 send(invitedClient->getSocket(), notifyMessage.c_str(), notifyMessage.length(), 0);
             } else {
                 // Gestion de l'erreur : le client invité n'est pas trouvé
-                std::cerr << "Error: Client to invite not found" << std::endl;
-            }
+            std::cerr << "Error: Client to invite not found" << std::endl;
+                }
         } else {
-            // Gestion de l'erreur : l'utilisateur n'a pas les droits nécessaires
-            std::string errorMessage = ":server 482 " + userNick + " " + channelName + " :You're not channel operator\r\n";
-            send(_fds[client_index].fd, errorMessage.c_str(), errorMessage.length(), 0);
+        // Gestion de l'erreur : l'utilisateur n'a pas les droits nécessaires
+          std::string errorMessage = ":server 482 " + userNick + " " + channelName + " :You're not channel operator\r\n";
+          send(_fds[client_index].fd, errorMessage.c_str(), errorMessage.length(), 0);
         }
     } else if (!clientExists(nick)) {
         sendErrorMessage(client_index,"401 ERR_NOSUCHNICK :Client " + nick +" not found");
@@ -271,6 +279,7 @@ void Server::handlePingCommand(const char* buffer, int client_index)
 }
 void Server::handleCAPCommand(const char* buffer, int client_index)
 {
+    std::cout << "-Handling " << buffer << std::endl;
         if ((strstr(buffer, "NICK ") != nullptr) || (strstr(buffer, "USER ")!= nullptr)) {
             handleNickCommand(buffer, client_index);
             handleUserCommand(buffer,client_index );
@@ -510,20 +519,14 @@ void Server::handleClientDisconnect(int client_index)
         }
     }
     }
-for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end();it++) {
+    for (std::vector<Client>::iterator it = _clients.begin() + 1; it != _clients.end();it++) {
 
-    if (it->getNick() != "" ? it->getNick() == _clients[client_index].getNick() : it->getIndex() == _clients[client_index].getIndex()) {
-        std::cout << "Removing client: " << it->getIndex() << " nicknamed: " << it->getNick() << " on socket: "<< it->getSocket() << "\n";
+        if (it->getNick() != "" ? it->getNick() == _clients[client_index].getNick() : it->getIndex() == _clients[client_index].getIndex()) {
+            std::cout << "Removing client: " << it->getIndex() << " nicknamed: " << it->getNick() << " on socket: "<< it->getSocket() << "\n";
             // close(it->getSocket());
             close(_fds[client_index].fd);
             _fds[client_index].fd = -1;
-            _clients[client_index].setActiveStatus(false);
-            _clients[client_index].setNick("");
-            _clients[client_index].setUsername("");
-            // _clients[client_index].setMode("");
-            _clients[client_index].setDisconnected();
-            _clients[client_index].setAuth(false);
-            _clients[client_index].clearInvChannels();
+            _clients[client_index].resetClient();
 
             // _clients.erase(it);
             break ;

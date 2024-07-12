@@ -3,8 +3,13 @@
 #include "Server.hpp"
 
 Client::Client(int socket,int index): _active(true),_socket(socket),_index(index), _authenticated(false),_isConnected(false){ 
+   if (socket == 3){
+        _nick = "Server";
+        _username = "Server";
+   } else{
     _nick = "";
     _username = "";
+   }
     return;}
 Client::~Client(){   return ;}
 
@@ -23,7 +28,11 @@ void Client::authenticate(){    _authenticated = true;}
 void Client::setActiveStatus(bool status){    _active = status;}
 void Client::addInvintedChannel(Channel *channel){ _invitedChannels.push_back(*channel);}
 void Client::clearInvChannels(){ _invitedChannels.clear();}
-
+bool Client::hasIndex(int i) const {
+    if (getIndex() == i)
+        return true;
+    else
+        return false;}
 bool Client::isInvitedChannel(Channel *channel) const{    
     for (std::vector<Channel>::const_iterator it = _invitedChannels.begin(); it != _invitedChannels.end(); it++){
 
@@ -87,18 +96,17 @@ bool Client::operator!=(const Client& other) const {
 }
 void Client::setDisconnected(){ _isConnected = false;}
 void Client::setConnected(){ _isConnected = true;}
-bool Client::isConnected(){ return _isConnected;}
-void Client::clear(){
-    this->_nick.clear();
-    this->_username.clear();
-    this->_authenticated = false;
-    this->_index = -1;
-    this->_socket = -1;
-    this->_invitedChannels.clear();
-    this->_isConnected = false;
-    this->_userModes.clear();
-}
+bool Client::isConnected() const { return _isConnected;}
 
+void Client::resetClient() {
+    setNick("");
+    setUsername("");
+    setActiveStatus(false);
+    setDisconnected();
+    setAuth(false);
+    clearInvChannels();
+    _userModes.clear();
+}
 
 // /server add IRC5 localhost/6667 -notls
 // /set irc.server.IRC5.password secret
@@ -106,7 +114,7 @@ void Client::clear(){
 // /set irc.server.IRC5.username simon
 // /connect IRC5
 /*
-/server add IRC 10.18.200.40/6667 -notls
+/server add IRC localhost/6667 -notls
 /set irc.server.IRC.password asd
 /set irc.server.IRC.nicks al
 /set irc.server.IRC.username alexis
